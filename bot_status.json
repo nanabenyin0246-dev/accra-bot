@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T17:13:01.273667",
-  "cycle": 22,
+  "timestamp": "2026-03-15T17:14:27.981775",
+  "cycle": 23,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -77,7 +77,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.04977,
+      "price": 0.0498,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -99,7 +99,7 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 278.2,
+      "price": 278.8,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -110,20 +110,20 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 225.14,
+      "price": 225.22,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may face currency risks."
     },
     {
-      "symbol": "TRUMPUSDT",
+      "symbol": "TRXUSDT",
       "signal": "HOLD",
       "score": -17,
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 4.041,
-      "reason": "The extreme fear sentiment and lack of recent news contribute to a bearish outlo",
-      "ghana": "Ghanaian investors may diversify portfolios."
+      "price": 0.2987,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
     }
   ],
   "buy_signals": 0,
