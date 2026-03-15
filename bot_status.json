@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T17:05:35.277369",
-  "cycle": 18,
+  "timestamp": "2026-03-15T17:07:01.849293",
+  "cycle": 19,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -69,7 +69,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.2004,
+      "price": 0.2,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -96,6 +96,17 @@
       "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
+      "symbol": "DOGEUSDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.09504,
+      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
+      "ghana": "Ghanaian investors may diversify portfolios."
+    },
+    {
       "symbol": "PEPEUSDT",
       "signal": "HOLD",
       "score": -20,
@@ -105,17 +116,6 @@
       "price": 3.35e-06,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
-    },
-    {
-      "symbol": "NATGAS",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "hfm",
-      "price": 2.8,
-      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
-      "ghana": "Ghana's economy may be affected by global commodity prices."
     }
   ],
   "buy_signals": 0,
