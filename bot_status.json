@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-15T14:17:58.998579",
-  "cycle": 2,
+  "timestamp": "2026-03-15T14:19:33.820188",
+  "cycle": 3,
   "strategy": "balanced",
   "market_condition": "neutral",
-  "assets_scanned": 38,
+  "assets_scanned": 41,
   "open_trades": 0,
   "open_positions": [],
   "top_opportunities": [
@@ -47,7 +47,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 3.963,
+      "price": 3.969,
       "reason": "The extreme fear sentiment and lack of recent news contribute to a bearish outlo",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -61,6 +61,28 @@
       "price": 182.85,
       "reason": "The EURJPY market is currently neutral, with extreme fear sentiment driving pote",
       "ghana": "Ghanaian investors may benefit from diversification."
+    },
+    {
+      "symbol": "SOLUSDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 87.67,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
+      "symbol": "OPNUSDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.3131,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "DOGEUSDT",
@@ -80,7 +102,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.001948,
+      "price": 0.001886,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors should exercise caution."
     },
@@ -94,28 +116,6 @@
       "price": 1.458,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
-      "symbol": "ADAUSDT",
-      "signal": "HOLD",
-      "score": 20,
-      "tech": 20,
-      "fund": 20,
-      "market": "crypto",
-      "price": 0.2641,
-      "reason": "The current extreme fear sentiment in the market presents a buying opportunity f",
-      "ghana": "Ghanaian investors may benefit from low prices."
-    },
-    {
-      "symbol": "SP500",
-      "signal": "HOLD",
-      "score": 18,
-      "tech": 0,
-      "fund": 40,
-      "market": "hfm",
-      "price": 5200,
-      "reason": "The SP500 index is currently in a neutral market with extreme fear sentiment, bu",
-      "ghana": "Ghanaian investors may benefit from a stable USD/GHS rate."
     }
   ],
   "buy_signals": 0,
