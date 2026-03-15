@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T16:59:35.073727",
-  "cycle": 14,
+  "timestamp": "2026-03-15T17:01:09.719193",
+  "cycle": 15,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -41,17 +41,6 @@
       "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
-      "symbol": "ZECUSDT",
-      "signal": "HOLD",
-      "score": -28,
-      "tech": -35,
-      "fund": -20,
-      "market": "crypto",
-      "price": 224.1,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
       "symbol": "COPPER",
       "signal": "HOLD",
       "score": 28,
@@ -63,15 +52,15 @@
       "ghana": "Ghanaian investors may benefit from diversification."
     },
     {
-      "symbol": "NIGHTUSDT",
+      "symbol": "SOLUSDT",
       "signal": "HOLD",
       "score": -26,
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.04968,
-      "reason": "The extreme fear sentiment and lack of recent news contribute to the bearish sig",
-      "ghana": "Ghanaian investors may diversify portfolios."
+      "price": 87.55,
+      "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
+      "ghana": "Ghanaian investors should exercise caution."
     },
     {
       "symbol": "FETUSDT",
@@ -80,7 +69,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.1988,
+      "price": 0.1994,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -96,26 +85,37 @@
       "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
-      "symbol": "BTCUSDT",
+      "symbol": "NIGHTUSDT",
       "signal": "HOLD",
       "score": -20,
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 71425.2,
-      "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
-      "ghana": "Ghanaian investors may face currency risks."
+      "price": 0.04962,
+      "reason": "The extreme fear sentiment and lack of recent news contribute to the bearish sig",
+      "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
-      "symbol": "XRPUSDT",
+      "symbol": "PEPEUSDT",
       "signal": "HOLD",
       "score": -20,
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 1.4126,
+      "price": 3.34e-06,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may face currency risks."
+      "ghana": "Ghanaian investors may exercise caution."
+    },
+    {
+      "symbol": "NATGAS",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "hfm",
+      "price": 2.8,
+      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
+      "ghana": "Ghana's economy may be affected by global commodity prices."
     }
   ],
   "buy_signals": 0,
