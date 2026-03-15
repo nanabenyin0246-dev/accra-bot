@@ -1,23 +1,12 @@
 {
-  "timestamp": "2026-03-15T16:49:30.623365",
-  "cycle": 7,
+  "timestamp": "2026-03-15T16:50:55.359664",
+  "cycle": 8,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
   "open_trades": 0,
   "open_positions": [],
   "top_opportunities": [
-    {
-      "symbol": "FETUSDT",
-      "signal": "SELL",
-      "score": -39,
-      "tech": -55,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.2013,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
     {
       "symbol": "PEPEUSDT",
       "signal": "SELL",
@@ -63,17 +52,6 @@
       "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
-      "symbol": "ZECUSDT",
-      "signal": "HOLD",
-      "score": -28,
-      "tech": -35,
-      "fund": -20,
-      "market": "crypto",
-      "price": 224.24,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
       "symbol": "COPPER",
       "signal": "HOLD",
       "score": 28,
@@ -91,9 +69,20 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.04995,
+      "price": 0.04993,
       "reason": "The extreme fear sentiment and lack of recent news contribute to the bearish sig",
       "ghana": "Ghanaian investors may diversify portfolios."
+    },
+    {
+      "symbol": "FETUSDT",
+      "signal": "HOLD",
+      "score": -26,
+      "tech": -30,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.2004,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "EURJPY",
@@ -113,8 +102,19 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 71425.11,
+      "price": 71400.0,
       "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
+      "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
+      "symbol": "XRPUSDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 1.4133,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may face currency risks."
     }
   ],
