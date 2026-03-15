@@ -1,12 +1,23 @@
 {
-  "timestamp": "2026-03-15T16:48:06.908871",
-  "cycle": 6,
+  "timestamp": "2026-03-15T16:49:30.623365",
+  "cycle": 7,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
   "open_trades": 0,
   "open_positions": [],
   "top_opportunities": [
+    {
+      "symbol": "FETUSDT",
+      "signal": "SELL",
+      "score": -39,
+      "tech": -55,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.2013,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
+    },
     {
       "symbol": "PEPEUSDT",
       "signal": "SELL",
@@ -58,7 +69,7 @@
       "tech": -35,
       "fund": -20,
       "market": "crypto",
-      "price": 224.49,
+      "price": 224.24,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -80,20 +91,9 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.04999,
+      "price": 0.04995,
       "reason": "The extreme fear sentiment and lack of recent news contribute to the bearish sig",
       "ghana": "Ghanaian investors may diversify portfolios."
-    },
-    {
-      "symbol": "FETUSDT",
-      "signal": "HOLD",
-      "score": -26,
-      "tech": -30,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.1998,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "EURJPY",
@@ -113,7 +113,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 71439.97,
+      "price": 71425.11,
       "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
       "ghana": "Ghanaian investors may face currency risks."
     }
