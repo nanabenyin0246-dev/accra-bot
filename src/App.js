@@ -8,7 +8,7 @@ const AI_CONFIG={
   groq:{url:'https://api.groq.com/openai/v1/chat/completions',model:'llama-3.3-70b-versatile',key:'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',label:'Groq Llama 3.3',color:'#f55036'},
 };
 const VALLEY_KEY='live_264966be983d94d76527a76199bf85182a69e3b19a918159';
-const GITHUB_RAW='https://raw.githubusercontent.com/nanabenyin0246-dev/accra-terminal/master';
+
 const VALLEY_BASE='https://api.valleyafrica.com/v1';
 const COINGECKO='https://api.coingecko.com/api/v3';
 const FOREX_API='https://api.frankfurter.app/latest?from=USD&to=GHS,NGN,ZAR,KES,EGP,XOF,EUR,GBP';
