@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T14:43:24.796418",
-  "cycle": 15,
+  "timestamp": "2026-03-15T16:07:46.156407",
+  "cycle": 1,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -8,15 +8,26 @@
   "open_positions": [],
   "top_opportunities": [
     {
-      "symbol": "USDGHS",
+      "symbol": "PEPEUSDT",
+      "signal": "SELL",
+      "score": -36,
+      "tech": -50,
+      "fund": -20,
+      "market": "crypto",
+      "price": 3.35e-06,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
+      "ghana": "Ghanaian investors may exercise caution."
+    },
+    {
+      "symbol": "CAKEUSDT",
       "signal": "HOLD",
-      "score": 31,
-      "tech": 40,
-      "fund": 20,
-      "market": "hfm",
-      "price": 15.3,
-      "reason": "The extreme fear sentiment and stable USD/GHS rate indicate a neutral market, wh",
-      "ghana": "Ghana's economy remains stable."
+      "score": -31,
+      "tech": -40,
+      "fund": -20,
+      "market": "crypto",
+      "price": 1.468,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "USDCAD",
@@ -26,8 +37,8 @@
       "fund": 20,
       "market": "hfm",
       "price": 1.3703,
-      "reason": "The USDCAD pair is influenced by the strong US dollar, and the Fear and Greed in",
-      "ghana": "Ghanaian investors may diversify portfolios."
+      "reason": "The USDCAD forex market is currently in a neutral state with extreme fear, which",
+      "ghana": "Ghanaian investors may lose value."
     },
     {
       "symbol": "COPPER",
@@ -37,18 +48,18 @@
       "fund": 20,
       "market": "hfm",
       "price": 4.2,
-      "reason": "The neutral market and stable USD/GHS exchange rate contribute to a stable envir",
+      "reason": "The extreme fear sentiment and stable USD/GHS exchange rate may present a buying",
       "ghana": "Ghanaian investors may benefit from diversification."
     },
     {
-      "symbol": "TRUMPUSDT",
+      "symbol": "NIGHTUSDT",
       "signal": "HOLD",
       "score": -26,
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 3.951,
-      "reason": "The extreme fear sentiment and lack of recent news contribute to a bearish outlo",
+      "price": 0.04994,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
     {
@@ -59,18 +70,18 @@
       "fund": 20,
       "market": "hfm",
       "price": 182.85,
-      "reason": "The EURJPY market is currently neutral, with extreme fear sentiment driving pote",
+      "reason": "The EURJPY market is currently neutral, with extreme fear sentiment driving inve",
       "ghana": "Ghanaian investors may benefit from diversification."
     },
     {
-      "symbol": "SOLUSDT",
+      "symbol": "BTCUSDT",
       "signal": "HOLD",
       "score": -20,
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 87.8,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "price": 71564.62,
+      "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
       "ghana": "Ghanaian investors may face currency risks."
     },
     {
@@ -80,42 +91,31 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.3161,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
-      "symbol": "DOGEUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.0954,
-      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
-      "ghana": "Ghanaian investors may diversify portfolios."
-    },
-    {
-      "symbol": "COSUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.001837,
+      "price": 0.3207,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors should exercise caution."
     },
     {
-      "symbol": "CAKEUSDT",
+      "symbol": "USD1USDT",
       "signal": "HOLD",
       "score": -20,
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 1.461,
+      "price": 0.9993,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
+      "symbol": "NATGAS",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "hfm",
+      "price": 2.8,
+      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
+      "ghana": "Ghana's economy may be affected by global commodity prices."
     }
   ],
   "buy_signals": 0,
@@ -124,7 +124,7 @@
     "value": 15,
     "label": "Extreme Fear",
     "trend": "declining",
-    "ts": 1773584046.985775
+    "ts": 1773590759.4894512
   },
   "markets": {
     "crypto": "active",
