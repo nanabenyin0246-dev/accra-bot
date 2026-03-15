@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T16:13:35.668072",
-  "cycle": 5,
+  "timestamp": "2026-03-15T16:15:04.335429",
+  "cycle": 6,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -17,17 +17,6 @@
       "price": 3.34e-06,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
-    },
-    {
-      "symbol": "CAKEUSDT",
-      "signal": "HOLD",
-      "score": -31,
-      "tech": -40,
-      "fund": -20,
-      "market": "crypto",
-      "price": 1.468,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "USDCAD",
@@ -58,7 +47,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.05004,
+      "price": 0.05009,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -80,7 +69,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 71551.53,
+      "price": 71540.82,
       "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -91,20 +80,9 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.3202,
+      "price": 0.3199,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors should exercise caution."
-    },
-    {
-      "symbol": "DOGEUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.09505,
-      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
-      "ghana": "Ghanaian investors may diversify portfolios."
     },
     {
       "symbol": "TRUMPUSDT",
@@ -113,9 +91,31 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 3.968,
+      "price": 3.97,
       "reason": "The extreme fear sentiment in the market, combined with the lack of recent news,",
       "ghana": "Ghanaian investors should exercise caution."
+    },
+    {
+      "symbol": "USD1USDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.9993,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
+      "symbol": "ADAUSDT",
+      "signal": "HOLD",
+      "score": 20,
+      "tech": 20,
+      "fund": 20,
+      "market": "crypto",
+      "price": 0.2644,
+      "reason": "The neutral market and extreme fear sentiment indicate a potentially undervalued",
+      "ghana": "Ghanaian investors can diversify portfolios with ADA."
     }
   ],
   "buy_signals": 0,
