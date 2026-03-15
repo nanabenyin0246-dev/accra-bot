@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T17:15:55.465224",
-  "cycle": 24,
+  "timestamp": "2026-03-15T17:17:26.003964",
+  "cycle": 25,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -44,7 +44,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 87.7,
+      "price": 87.76,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors should exercise caution."
     },
@@ -55,7 +55,7 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.1987,
+      "price": 0.1988,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -88,7 +88,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 3.34e-06,
+      "price": 3.35e-06,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -99,7 +99,7 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 277.6,
+      "price": 278.0,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -110,19 +110,19 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 225.06,
+      "price": 225.29,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may face currency risks."
     },
     {
-      "symbol": "XPTUSD",
+      "symbol": "TRXUSDT",
       "signal": "HOLD",
-      "score": 13,
-      "tech": 40,
+      "score": -17,
+      "tech": -15,
       "fund": -20,
-      "market": "hfm",
-      "price": 950,
-      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
+      "market": "crypto",
+      "price": 0.2986,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     }
   ],
