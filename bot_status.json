@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T16:15:04.335429",
-  "cycle": 6,
+  "timestamp": "2026-03-15T16:40:28.142978",
+  "cycle": 1,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -19,6 +19,39 @@
       "ghana": "Ghanaian investors may exercise caution."
     },
     {
+      "symbol": "TRXUSDT",
+      "signal": "HOLD",
+      "score": -31,
+      "tech": -40,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.2986,
+      "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
+      "ghana": "Ghanaian investors may diversify portfolios."
+    },
+    {
+      "symbol": "XPTUSD",
+      "signal": "HOLD",
+      "score": 31,
+      "tech": 40,
+      "fund": 20,
+      "market": "hfm",
+      "price": 950,
+      "reason": "The neutral market and stable USD/GHS exchange rate contribute to a balanced out",
+      "ghana": "Ghanaian investors may benefit from diversification."
+    },
+    {
+      "symbol": "USDGHS",
+      "signal": "HOLD",
+      "score": 31,
+      "tech": 40,
+      "fund": 20,
+      "market": "hfm",
+      "price": 15.3,
+      "reason": "The neutral market mode and stable USD/GHS rate contribute to the neutral signal",
+      "ghana": "Ghana's economy remains stable."
+    },
+    {
       "symbol": "USDCAD",
       "signal": "HOLD",
       "score": 31,
@@ -26,8 +59,19 @@
       "fund": 20,
       "market": "hfm",
       "price": 1.3703,
-      "reason": "The USDCAD forex market is currently in a neutral state with extreme fear, which",
-      "ghana": "Ghanaian investors may lose value."
+      "reason": "The USDCAD pair is influenced by the strong US dollar, and the Fear and Greed in",
+      "ghana": "Ghanaian investors may diversify portfolios."
+    },
+    {
+      "symbol": "ZECUSDT",
+      "signal": "HOLD",
+      "score": -28,
+      "tech": -35,
+      "fund": -20,
+      "market": "crypto",
+      "price": 224.41,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
+      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "COPPER",
@@ -37,7 +81,7 @@
       "fund": 20,
       "market": "hfm",
       "price": 4.2,
-      "reason": "The extreme fear sentiment and stable USD/GHS exchange rate may present a buying",
+      "reason": "The current extreme fear sentiment and stable USD/GHS exchange rate may present ",
       "ghana": "Ghanaian investors may benefit from diversification."
     },
     {
@@ -47,9 +91,20 @@
       "tech": -30,
       "fund": -20,
       "market": "crypto",
-      "price": 0.05009,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may exercise caution."
+      "price": 0.04998,
+      "reason": "The extreme fear sentiment and lack of recent news contribute to the bearish sig",
+      "ghana": "Ghanaian investors may diversify portfolios."
+    },
+    {
+      "symbol": "FETUSDT",
+      "signal": "HOLD",
+      "score": -26,
+      "tech": -30,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.2009,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
     },
     {
       "symbol": "EURJPY",
@@ -59,63 +114,8 @@
       "fund": 20,
       "market": "hfm",
       "price": 182.85,
-      "reason": "The EURJPY market is currently neutral, with extreme fear sentiment driving inve",
-      "ghana": "Ghanaian investors may benefit from diversification."
-    },
-    {
-      "symbol": "BTCUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 71540.82,
-      "reason": "The extreme fear sentiment in the market and lack of recent positive news contri",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
-      "symbol": "OPNUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.3199,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors should exercise caution."
-    },
-    {
-      "symbol": "TRUMPUSDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 3.97,
-      "reason": "The extreme fear sentiment in the market, combined with the lack of recent news,",
-      "ghana": "Ghanaian investors should exercise caution."
-    },
-    {
-      "symbol": "USD1USDT",
-      "signal": "HOLD",
-      "score": -20,
-      "tech": -20,
-      "fund": -20,
-      "market": "crypto",
-      "price": 0.9993,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
-      "symbol": "ADAUSDT",
-      "signal": "HOLD",
-      "score": 20,
-      "tech": 20,
-      "fund": 20,
-      "market": "crypto",
-      "price": 0.2644,
-      "reason": "The neutral market and extreme fear sentiment indicate a potentially undervalued",
-      "ghana": "Ghanaian investors can diversify portfolios with ADA."
+      "reason": "The EURJPY market is neutral with extreme fear, and the stable USD/GHS rate supp",
+      "ghana": "Ghanaian investors may diversify portfolios."
     }
   ],
   "buy_signals": 0,
@@ -124,7 +124,7 @@
     "value": 15,
     "label": "Extreme Fear",
     "trend": "declining",
-    "ts": 1773590759.4894512
+    "ts": 1773592731.7308996
   },
   "markets": {
     "crypto": "active",
