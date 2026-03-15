@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T17:51:34.982699",
-  "cycle": 48,
+  "timestamp": "2026-03-15T17:53:04.069830",
+  "cycle": 49,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -49,6 +49,17 @@
       "ghana": "Ghanaian investors may benefit from diversification."
     },
     {
+      "symbol": "FETUSDT",
+      "signal": "HOLD",
+      "score": -26,
+      "tech": -30,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.1988,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
+      "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
       "symbol": "EURJPY",
       "signal": "HOLD",
       "score": -21,
@@ -66,9 +77,20 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.05013,
+      "price": 0.05015,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors should be cautious."
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "signal": "HOLD",
+      "score": -20,
+      "tech": -20,
+      "fund": -20,
+      "market": "crypto",
+      "price": 0.09518,
+      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
+      "ghana": "Ghanaian investors may exercise caution."
     },
     {
       "symbol": "PEPEUSDT",
@@ -77,7 +99,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 3.34e-06,
+      "price": 3.37e-06,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -102,28 +124,6 @@
       "price": 5200,
       "reason": "The SP500 index is currently in a neutral market with extreme fear sentiment, bu",
       "ghana": "Ghanaian investors can diversify portfolios."
-    },
-    {
-      "symbol": "TAOUSDT",
-      "signal": "HOLD",
-      "score": -17,
-      "tech": -15,
-      "fund": -20,
-      "market": "crypto",
-      "price": 278.8,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
-      "ghana": "Ghanaian investors should exercise caution."
-    },
-    {
-      "symbol": "ZECUSDT",
-      "signal": "HOLD",
-      "score": -17,
-      "tech": -15,
-      "fund": -20,
-      "market": "crypto",
-      "price": 225.1,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may face currency risks."
     }
   ],
   "buy_signals": 0,
