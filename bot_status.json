@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-03-15T17:23:23.340823",
-  "cycle": 29,
+  "timestamp": "2026-03-15T17:24:50.579232",
+  "cycle": 30,
   "strategy": "balanced",
   "market_condition": "neutral",
   "assets_scanned": 41,
@@ -55,7 +55,7 @@
       "tech": -20,
       "fund": -20,
       "market": "crypto",
-      "price": 0.0501,
+      "price": 0.05022,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may exercise caution."
     },
@@ -77,7 +77,7 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 278.1,
+      "price": 277.3,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -88,18 +88,7 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 225.04,
-      "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
-      "ghana": "Ghanaian investors may face currency risks."
-    },
-    {
-      "symbol": "CAKEUSDT",
-      "signal": "HOLD",
-      "score": -17,
-      "tech": -15,
-      "fund": -20,
-      "market": "crypto",
-      "price": 1.468,
+      "price": 224.97,
       "reason": "The extreme fear sentiment in the market and lack of recent news may contribute ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -110,7 +99,7 @@
       "tech": -15,
       "fund": -20,
       "market": "crypto",
-      "price": 0.1977,
+      "price": 0.1979,
       "reason": "The extreme fear sentiment in the market and lack of recent news may indicate a ",
       "ghana": "Ghanaian investors may face currency risks."
     },
@@ -124,6 +113,17 @@
       "price": 950,
       "reason": "The extreme fear sentiment and neutral market mode contribute to the bearish sig",
       "ghana": "Ghanaian investors may face currency risks."
+    },
+    {
+      "symbol": "USDGHS",
+      "signal": "HOLD",
+      "score": 13,
+      "tech": 40,
+      "fund": -20,
+      "market": "hfm",
+      "price": 15.3,
+      "reason": "The extreme fear sentiment and stable exchange rate indicate a potential downtur",
+      "ghana": "Ghana's economy remains stable."
     }
   ],
   "buy_signals": 0,
