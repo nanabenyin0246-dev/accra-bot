@@ -1,0 +1,6 @@
+*.json
+*.bak*
+*.log
+polymarket_paper.json
+polyalerthub_log.json
+trades.json
