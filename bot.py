@@ -1342,8 +1342,8 @@ def execute(symbol, signal, price, cfg, conf, market):
                 amount = round(bal * 0.40, 2)
                 amount = min(amount, 15)  # Never more than $15
                 amount = min(amount, 12)  # Cap max trade at $12
-                if amount < 3:
-                    log(f"  SKIP {symbol}: ${amount:.2f} < $3")
+                if amount < 2:
+                    log(f"  SKIP {symbol}: ${amount:.2f} < $2")
                     return False
                 qty   = round(amount / price, prec)
                 # Ensure minimum $5 notional value
