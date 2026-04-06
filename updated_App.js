@@ -1,18 +1,19 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 const LW_CDN='https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
 function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)){res();return;}const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
 
+const _lk=(k,d)=>{try{return localStorage.getItem(k)||d;}catch{return d;}};
 const AI_CONFIG={
-  anthropic:{url:'https://api.anthropic.com/v1/messages',model:'claude-sonnet-4-20250514',key:null,label:'Claude Sonnet 4',color:'#f5a623'},
-  groq:{url:'https://api.groq.com/openai/v1/chat/completions',model:'llama-3.3-70b-versatile',key:'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',label:'Groq Llama 3.3',color:'#f55036'},
+  anthropic:{url:'https://api.anthropic.com/v1/messages',model:'claude-sonnet-4-5-20251001',key:_lk('at_ant_key',null),label:'Claude Sonnet 4.5',color:'#f5a623'},
+  groq:{url:'https://api.groq.com/openai/v1/chat/completions',model:'llama-3.3-70b-versatile',key:_lk('at_groq_key',null),label:'Groq Llama 3.3',color:'#f55036'},
 };
+const VALLEY_KEY=_lk('at_valley_key','');
 
-
-
-
-
-
+const VALLEY_BASE='https://api.valleyafrica.com/v1';
+const COINGECKO='https://api.coingecko.com/api/v3';
+const FOREX_API='https://api.frankfurter.app/latest?from=USD&to=GHS,NGN,ZAR,KES,EGP,XOF,EUR,GBP';
+const FEAR_API='https://api.alternative.me/fng/?limit=1';
 
 const EXCHANGES={
   GSE:{name:'Ghana Stock Exchange',country:'Ghana',currency:'GHS',flag:'GH',color:'#f5a623'},
@@ -87,7 +88,11 @@ function generateOHLC(seed,days=60){
     p=c;
   }
   return data;
-}let ag=g/p,al=l/p;for(let i=p+1;i<closes.length;i++){const d=closes[i]-closes[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;}return al===0?100:+(100-100/(1+ag/al)).toFixed(2);})();
+}
+
+function generateSignal(closes){
+  if(!closes||closes.length<35) return null;
+  const rsi=(()=>{const p=14;let g=0,l=0;for(let i=1;i<=p;i++){const d=closes[i]-closes[i-1];d>0?g+=d:l-=d;}let ag=g/p,al=l/p;for(let i=p+1;i<closes.length;i++){const d=closes[i]-closes[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;}return al===0?100:+(100-100/(1+ag/al)).toFixed(2);})();
   const ema=(arr,n)=>{if(arr.length<n)return[];const k=2/(n+1);let r=[arr.slice(0,n).reduce((a,b)=>a+b,0)/n];for(let i=n;i<arr.length;i++)r.push(arr[i]*k+r[r.length-1]*(1-k));return r;};
   const e9=ema(closes,9),e21=ema(closes,21);
   const macdLine=ema(closes,12).map((v,i)=>v-(ema(closes,26)[i]||v)).filter(Boolean);
@@ -108,10 +113,10 @@ export default function App(){
   const [page,setPage]=useState('dashboard');
   const [sidebarOpen,setSidebarOpen]=useState(true);
   const [activeEx,setActiveEx]=useState('GSE');
-  const [stocks,_setStocks]=useState(ALL_STOCKS);
+  const [stocks,setStocks]=useState(ALL_STOCKS);
   const [selStock,setSelStock]=useState(ALL_STOCKS.GSE[0]);
-  const [forex,_setForex]=useState({GHS:15.27,NGN:1580,ZAR:18.4,KES:129,EGP:48.5,XOF:610,EUR:0.92,GBP:0.79});
-  const [crypto,_setCrypto]=useState({});
+  const [forex,setForex]=useState({GHS:15.27,NGN:1580,ZAR:18.4,KES:129,EGP:48.5,XOF:610,EUR:0.92,GBP:0.79});
+  const [crypto,setCrypto]=useState({});
   const [fearGreed,setFearGreed]=useState({value:42,label:'Fear'});
   const [botSig,setBotSig]=useState(null);
   const [botCoin,setBotCoin]=useState('bitcoin');
@@ -130,15 +135,82 @@ export default function App(){
   const [botStatus,setBotStatus]=useState(null);
   const [botStrategy,setBotStrategy]=useState({mode:'balanced',min_confidence:35,max_open_trades:5,crypto_enabled:true,stocks_enabled:true,hfm_enabled:true,avoid_assets:[],prefer_assets:[],market_condition:'neutral'});
   const [botConnected,setBotConnected]=useState(false);
+  const [realBal,setRealBal]=useState(null);
+  const [realBalLoading,setRealBalLoading]=useState(false);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiRec,setAiRec]=useState('');
+  const [pendingStrategy,setPendingStrategy]=useState(null);
+  const [approving,setApproving]=useState(false);
   const [portfolio]=useState([{sym:'BTC',qty:0.012,avg:62000,color:'#f7931a'},{sym:'SOL',qty:2.5,avg:140,color:'#9945ff'},{sym:'MTNGH',qty:1200,avg:1.72,color:'#f5a623'},{sym:'GCB',qty:500,avg:5.80,color:'#00c853'}]);
   const chatEndRef=useRef(null);
+  const botRef=useRef(null);
   const cmdRef=useRef(null);
+
+  useEffect(()=>{
+    async function f(){
+      try{
+        const r=await fetch(`${COINGECKO}/simple/price?ids=bitcoin,ethereum,solana,binancecoin&vs_currencies=usd&include_24hr_change=true`);
+        setCrypto(await r.json());
+      }catch{}
+    }
+    f();const t=setInterval(f,60000);return()=>clearInterval(t);
+  },[]);
+
+  useEffect(()=>{
+    async function f(){
+      try{
+        const r=await fetch(FOREX_API);
+        const d=await r.json();
+        if(d.rates) setForex(d.rates);
+      }catch{}
+    }
+    f();const t=setInterval(f,300000);return()=>clearInterval(t);
+  },[]);
+
+  useEffect(()=>{
+    async function f(){
+      try{
+        const r=await fetch(FEAR_API);
+        const d=await r.json();
+        if(d.data?.[0]) setFearGreed({value:+d.data[0].value,label:d.data[0].value_classification});
+      }catch{}
+    }
+    f();const t=setInterval(f,3600000);return()=>clearInterval(t);
+  },[]);
+
+  useEffect(()=>{
+    async function f(){
+      try{
+        const r=await fetch(`${VALLEY_BASE}/stocks/prices`,{headers:{'X-API-Key':VALLEY_KEY}});
+        if(!r.ok) return;
+        const d=await r.json();
+        if(d.data){
+          setStocks(prev=>({...prev,GSE:prev.GSE.map(s=>{const live=d.data.find(x=>x.ticker===s.t);return live?{...s,p:live.price||s.p,pc:live.prev_close||s.pc,v:live.volume||s.v}:s;})}));
+        }
+      }catch{}
+    }
+    f();const t=setInterval(f,60000);return()=>clearInterval(t);
+  },[]);
+
+  const runBot=useCallback(async()=>{
+    try{
+      const r=await fetch(`${COINGECKO}/coins/${botCoin}/ohlc?vs_currency=usd&days=14`);
+      const raw=await r.json();
+      if(!Array.isArray(raw)||raw.length<40) return;
+      const closes=raw.map(([,,,,c])=>c);
+      const price=closes[closes.length-1];
+      const sig=generateSignal(closes);
+      setBotSig({...sig,price,coin:botCoin});
+      setBotLog(prev=>[{time:new Date().toLocaleTimeString(),coin:botCoin.toUpperCase(),price,action:sig.signal,confidence:sig.confidence,rsi:sig.rsi,macd:sig.macd,reasons:sig.reasons?.[0]||''},...prev.slice(0,14)]);
+    }catch{}
+  },[botCoin]);
+
+  useEffect(()=>{if(botRunning){runBot();botRef.current=setInterval(runBot,30000);}else clearInterval(botRef.current);return()=>clearInterval(botRef.current);},[botRunning,runBot]);
 
     useEffect(()=>{
     async function fetchBotStatus(){
       try{
-        const url=`https://gist.githubusercontent.com/nanabenyin0246-dev/4f5f6918288ddaec0a1fc998af3e6f99/raw/bot_status.json?t=${Date.now()}`;
-        const r=await fetch(url,{cache:"no-store"});
+        const r=await fetch(`https://gist.githubusercontent.com/nanabenyin0246-dev/4f5f6918288ddaec0a1fc998af3e6f99/raw/bot_status.json?t=${Date.now()}`,{cache:'no-store'});
         if(r.ok){const d=await r.json();setBotStatus(d);setBotConnected(true);}
         else{setBotConnected(false);}
       }catch{setBotConnected(false);}
@@ -154,6 +226,40 @@ export default function App(){
       setBotStrategy(updated);
       await sendChat('Based on current market conditions analyze and confirm this strategy change: '+JSON.stringify(newStrategy));
     }catch(e){console.error(e);}
+  }
+  async function fetchRealBal(){
+    setRealBalLoading(true);
+    try{
+      const resp=await fetch('https://api.binance.com/api/v3/ticker/24hr',{cache:'no-store'});
+      const tickers=await resp.json();
+      const prices={};
+      tickers.forEach(t=>{if(t.symbol.endsWith('USDT'))prices[t.symbol.replace('USDT','')]=parseFloat(t.lastPrice);});
+      const sol=prices['SOL']||0,btc=prices['BTC']||0,eth=prices['ETH']||0;
+      setRealBal({sol_price:sol,btc_price:btc,eth_price:eth,
+        sol_value:(0.2897*sol).toFixed(2),usdt:27.42,
+        total:(27.42+0.2897*sol).toFixed(2),
+        pnl_pct:(((27.42+0.2897*sol)-48)/48*100).toFixed(1),
+        updated:new Date().toLocaleTimeString()});
+    }catch(e){console.error(e);}
+    setRealBalLoading(false);
+  }
+  async function approveStrategy(strategy){
+    setApproving(true);
+    try{
+      const payload={files:{'bot_strategy.json':{content:JSON.stringify({
+        ...strategy,
+        last_updated:new Date().toISOString(),
+        updated_by:'terminal_ai'
+      },null,2)}}};
+      await fetch('https://api.github.com/gists/4f5f6918288ddaec0a1fc998af3e6f99',{
+        method:'PATCH',
+        headers:{'Authorization':`Bearer ${localStorage.getItem('at_gh_token')||''}`,'Content-Type':'application/json'},
+        body:JSON.stringify(payload)});
+      setBotStrategy(prev=>({...prev,...strategy}));
+      setPendingStrategy(null);
+      setAiRec('Strategy approved and sent to bot! Changes will take effect next cycle.');
+    }catch(e){setAiRec('Failed to send strategy to bot. Try again.');}
+    setApproving(false);
   }
 
   async function sendChat(text){
@@ -248,6 +354,68 @@ export default function App(){
   const cardStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'16px 20px'};
   const headerStyle={fontSize:16,fontWeight:600,color:C.text,marginBottom:12,letterSpacing:0.3};
   const numStyle={fontSize:20,fontWeight:700,color:C.text,letterSpacing:0.3};
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const _G='4f5f6918288ddaec0a1fc998af3e6f99';
+    const _T=localStorage.getItem('at_gh_token')||'';if(!_T)return;
+    const _push=async()=>{
+      try{
+        const _b=crypto?.bitcoin?.usd_24h_change||0;
+        const _f=fearGreed?.value||50;
+        const _g=Math.min(100,
+          RISK_EVENTS.filter(e=>!dismissedRisks.has(e.id)&&e.severity==='HIGH').length*15+
+          RISK_EVENTS.filter(e=>!dismissedRisks.has(e.id)&&e.severity==='CRITICAL').length*25+
+          (forex?.GHS>16?10:forex?.GHS>15?5:0)+(_f<20?5:_f>80?8:0));
+        await fetch('https://api.github.com/gists/'+_G,{
+          method:'PATCH',
+          headers:{'Authorization':'Bearer '+_T,'Content-Type':'application/json'},
+          body:JSON.stringify({files:{'terminal_intelligence.json':{content:JSON.stringify({
+            timestamp:new Date().toISOString(),
+            source:'accra_terminal_v16',
+            global_risk_score:_g,
+            risk_level:_g>70?'CRITICAL':_g>45?'HIGH':_g>25?'MEDIUM':'LOW',
+            crypto:{
+              btc_price:crypto?.bitcoin?.usd||0,
+              btc_24h_change:_b,
+              btc_trend:_b>4?'STRONG_UP':_b>1.5?'UP':_b<-4?'STRONG_DOWN':_b<-1.5?'DOWN':'NEUTRAL',
+              eth_price:crypto?.ethereum?.usd||0,
+              sol_price:crypto?.solana?.usd||0,
+              fear_greed:_f,
+              fear_greed_label:fearGreed?.label||'Neutral',
+            },
+            fx_stress:{
+              GHS:{rate:forex?.GHS,trend:forex?.GHS>16?'CRISIS':forex?.GHS>15.5?'WEAK':'STABLE'},
+              NGN:{rate:forex?.NGN,trend:forex?.NGN>1700?'CRISIS':forex?.NGN>1600?'WEAK':'STABLE'},
+              ZAR:{rate:forex?.ZAR,trend:forex?.ZAR>20?'CRISIS':forex?.ZAR>19?'WEAK':'STABLE'},
+            },
+            active_risks:RISK_EVENTS.filter(e=>!dismissedRisks.has(e.id)).map(e=>({
+              title:e.title,severity:e.severity,
+              score:e.severity==='CRITICAL'?25:e.severity==='HIGH'?15:8,
+              affects_crypto:['war','conflict','sanction','fed','inflation'].some(k=>e.title.toLowerCase().includes(k)),
+              affects_gold:['gold','inflation','war','conflict'].some(k=>e.title.toLowerCase().includes(k)),
+              affects_oil:['oil','opec','iran','gulf'].some(k=>e.title.toLowerCase().includes(k)),
+              affects_african_stocks:['ecg','cedi','naira','imf','ghana','nigeria'].some(k=>e.title.toLowerCase().includes(k)),
+            })),
+            recommendations:[
+              ...(_g>65?[{action:'REDUCE_EXPOSURE',priority:'HIGH'}]:[]),
+              ...(_f<=20?[{action:'ACCUMULATE_BTC',priority:'HIGH'}]:[]),
+              ...(_f>=85?[{action:'TAKE_PROFITS',priority:'HIGH'}]:[]),
+              ...(forex?.GHS>16?[{action:'FAVOR_HARD_ASSETS',priority:'HIGH'}]:[]),
+            ],
+            quick_signals:{
+              mode_suggestion:_g>65?'conservative':_g>35?'balanced':'aggressive',
+              btc_favorable:_f<45&&_b>-6,
+            },
+          })}}}),
+        });
+      }catch(_e){console.warn('[INTEL]',_e.message);}
+    };
+    _push();
+    const _t=setInterval(_push,300000);
+    return()=>clearInterval(_t);
+  },[fearGreed,crypto,forex,dismissedRisks]);
+
 
   return (
     <div style={{display:'flex',height:'100vh',background:C.bg,color:C.text,fontFamily:"'Inter','IBM Plex Sans',sans-serif",overflow:'hidden',fontSize:14}}>
@@ -1037,13 +1205,20 @@ export default function App(){
 
           {page==='botlive'&&(
             <div>
+              {!realBal&&(<button onClick={fetchRealBal} style={{width:'100%',padding:12,marginBottom:16,background:'#f0b90b18',border:'1px solid #f0b90b',borderRadius:8,color:'#f0b90b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{realBalLoading?'Loading...':'Load Real Portfolio'}</button>)}
+              {realBal&&(<div style={{marginBottom:16,padding:16,borderRadius:8,border:'1px solid #f0b90b44',background:'#f0b90b08'}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}><span style={{fontWeight:700,color:'#f0b90b'}}>REAL PORTFOLIO</span><span style={{fontSize:11,opacity:0.5}}>{realBal.updated}</span></div><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>{[['USDT','$'+realBal.usdt,'#e0e0e0'],['SOL','$'+realBal.sol_value,'#00d4aa'],['Total','$'+realBal.total,'#f0b90b'],['PnL',realBal.pnl_pct+'%',parseFloat(realBal.pnl_pct)>=0?'#00d4aa':'#ff4444']].map(([l,v,c])=>(<div key={l} style={{textAlign:'center',padding:'8px 4px',background:'#ffffff08',borderRadius:6}}><div style={{fontSize:10,opacity:0.6,marginBottom:2}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}</div></div>)}
+              {/* Market Status */}
+              <div style={{marginBottom:12,padding:10,borderRadius:6,background:'#00d4aa11',border:'1px solid #00d4aa44',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:11,color:'#00d4aa',fontWeight:700}}>● MARKET FILTER ACTIVE</span>
+                <span style={{fontSize:10,opacity:0.5}}>Bot trades only in favourable conditions</span>
+              </div>
               {/* Bot Connection Status */}
               <div style={{display:'flex',gap:12,marginBottom:16,alignItems:'center'}}>
                 <div style={{...cardStyle,flex:1,padding:'12px 16px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <div>
-                      <div style={{fontSize:16,fontWeight:600,color:C.text}}>ACCRA SUPER BOT v8</div>
-                      <div style={{fontSize:12,color:C.text3}}>Universal Multi-Market Engine</div>
+                      <div style={{fontSize:16,fontWeight:600,color:C.text}}>ACCRA BOT v9 - MULTI-AI</div>
+                      <div style={{fontSize:12,color:C.text3}}>Groq + Gemini + OpenRouter</div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <div style={{width:8,height:8,borderRadius:'50%',background:botConnected?C.green:C.red}}></div>
@@ -1066,7 +1241,8 @@ export default function App(){
                   <div style={cardStyle}>
                     <div style={{fontSize:14,fontWeight:600,marginBottom:12,color:C.text}}>Live Statistics</div>
                     {[
-                      ['Mode',botStatus.strategy?.toUpperCase()],
+                      ['Version',botStatus.version||'v10'],
+                      ['Mode',botStatus.strategy_mode?.toUpperCase()],
                       ['Market',botStatus.market_condition],
                       ['Assets Scanned',botStatus.assets_scanned],
                       ['Open Trades',botStatus.open_trades],
@@ -1142,7 +1318,7 @@ export default function App(){
                       {[['crypto','Crypto'],['stocks','Stocks'],['hfm','HFM/Forex']].map(([k,label])=>(
                         <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'4px 0'}}>
                           <span style={{fontSize:12,color:C.text2}}>{label}</span>
-                          <div onClick={()=>setBotStrategy(prev=>({...prev,[k+'_enabled']:!prev[k+'_enabled']}))}
+                          <div onClick={async()=>{const newVal=!botStrategy[k+'_enabled'];setBotStrategy(prev=>({...prev,[k+'_enabled']:newVal}));try{const s={...botStrategy,[k+'_enabled']:newVal,updated_by:'terminal',last_updated:new Date().toISOString()};await fetch('https://api.github.com/gists/4f5f6918288ddaec0a1fc998af3e6f99',{method:'PATCH',headers:{'Authorization':'Bearer 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','Content-Type':'application/json'},body:JSON.stringify({files:{'bot_strategy.json':{content:JSON.stringify(s,null,2)}}})});}catch(e){console.error(e);}}}
                             style={{width:36,height:20,borderRadius:10,cursor:'pointer',position:'relative',
                               background:botStrategy[k+'_enabled']?C.green:C.border}}>
                             <div style={{position:'absolute',top:2,left:botStrategy[k+'_enabled']?18:2,
@@ -1151,10 +1327,41 @@ export default function App(){
                         </div>
                       ))}
                     </div>
-                    <button onClick={()=>sendChat('Based on current market data, what trading strategy should the bot use? Analyze Fear&Greed, crypto trends, and macro conditions to recommend: mode (aggressive/balanced/conservative), market_condition (bull/bear/neutral), and min_confidence threshold.')}
+                    <button onClick={async()=>{
+                        setAiLoading(true);setAiRec('');
+                        const fg=fearGreed?.value||50;
+                        const btc=crypto.bitcoin?.usd||0;
+                        const top=botStatus?.top_opportunities?.[0];
+                        const prompt=`Trading strategy AI. Fear&Greed=${fg}/100, BTC=$${btc.toLocaleString()}, USD/GHS=${forex.GHS?.toFixed(2)||'N/A'}, Assets scanned=${botStatus?.assets_scanned||0}, Open trades=${botStatus?.open_trades||0}, Top signal=${top?.symbol||'none'} score=${top?.score||0}. Recommend strategy. Reply ONLY valid JSON no markdown: {"mode":"conservative|balanced|aggressive","market_condition":"bear|neutral|bull","min_confidence":35,"reason":"2 sentences","action":"what to do now"}`;
+                        try{
+                          const _gk=localStorage.getItem('at_groq_key')||'';if(!_gk){setAiRec('Groq key not set in Settings.');setAiLoading(false);return;}
+                          const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${_gk}`,'Content-Type':'application/json'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:200,temperature:0.1,messages:[{role:'system',content:'Return valid JSON only.'},{role:'user',content:prompt}]})});
+                          const d=await res.json();
+                          const p=JSON.parse(d.choices[0].message.content.trim());
+                          setBotStrategy(prev=>({...prev,mode:p.mode||prev.mode,market_condition:p.market_condition||prev.market_condition,min_confidence:p.min_confidence||35}));
+                          setAiRec(p.reason+' '+p.action);
+                        }catch(e){setAiRec('AI analysis failed. Try again.');}
+                        setAiLoading(false);
+                      }}
                       style={{width:'100%',padding:'9px',background:`${C.gold}18`,border:`1px solid ${C.gold}`,borderRadius:5,color:C.gold,fontWeight:600,fontSize:13,cursor:'pointer'}}>
-                      Ask AI for Strategy
+                      {aiLoading?'Analyzing market...':'Ask AI for Strategy'}
                     </button>
+                    {aiRec&&(<div style={{marginTop:8,padding:'8px 10px',background:C.bg3,borderRadius:5,fontSize:12,color:C.text2,lineHeight:1.6,border:`1px solid ${C.border}`}}><b style={{color:C.gold}}>AI Recommendation:</b><br/>{aiRec}</div>)}
+{pendingStrategy&&(
+  <div style={{marginTop:8}}>
+    <div style={{fontSize:11,color:C.text3,marginBottom:4}}>Pending: Mode={pendingStrategy.mode} | Market={pendingStrategy.market_condition} | Confidence={pendingStrategy.min_confidence}%</div>
+    <div style={{display:'flex',gap:6}}>
+      <button onClick={()=>approveStrategy(pendingStrategy)}
+        style={{flex:1,padding:'8px',background:`${C.green}20`,border:`1px solid ${C.green}`,borderRadius:5,color:C.green,fontWeight:700,fontSize:12,cursor:'pointer'}}>
+        {approving?'Sending to Bot...':'APPROVE - Send to Bot'}
+      </button>
+      <button onClick={()=>setPendingStrategy(null)}
+        style={{padding:'8px 12px',background:`${C.red}20`,border:`1px solid ${C.red}`,borderRadius:5,color:C.red,fontWeight:600,fontSize:12,cursor:'pointer'}}>
+        Reject
+      </button>
+    </div>
+  </div>
+)}
                   </div>
                 </div>
               ):(
@@ -1203,21 +1410,28 @@ export default function App(){
               <div style={cardStyle}>
                 <div style={headerStyle}>API Configuration</div>
                 {[
-                  {label:'Anthropic API Key',placeholder:'sk-ant-...'},
-                  {label:'Groq API Key',placeholder:'gsk_...'},
-                  {label:'Valley Africa Key',placeholder:'live_...'},
-                ].map(({label,placeholder})=>(
-                  <div key={label} style={{marginBottom:16}}>
+                  {label:'Anthropic API Key',placeholder:'sk-ant-...',k:'at_ant_key'},
+                  {label:'Groq API Key',placeholder:'gsk_...',k:'at_groq_key'},
+                  {label:'Valley Africa Key',placeholder:'live_...',k:'at_valley_key'},
+                  {label:'GitHub Token (Bot)',placeholder:'ghp_...',k:'at_gh_token'},
+                ].map(({label,placeholder,k})=>(
+                  <div key={k} style={{marginBottom:16}}>
                     <div style={{fontSize:13,color:C.text2,marginBottom:6}}>{label}</div>
-                    <input type="password" placeholder={placeholder}
-                      style={{width:'100%',background:C.bg3,border:`1px solid ${C.border}`,color:C.text,padding:'10px 12px',borderRadius:5,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                    <div style={{display:'flex',gap:6}}>
+                      <input type="password" placeholder={placeholder} id={`key-${k}`}
+                        defaultValue={localStorage.getItem(k)||''}
+                        style={{flex:1,background:C.bg3,border:`1px solid ${C.border}`,color:C.text,padding:'10px 12px',borderRadius:5,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                      <button onClick={()=>{const v=document.getElementById(`key-${k}`)?.value;if(v){localStorage.setItem(k,v);alert(`${label} saved!`);}}}
+                        style={{padding:'0 14px',background:`${C.gold}20`,border:`1px solid ${C.gold}`,borderRadius:5,color:C.gold,fontWeight:600,fontSize:12,cursor:'pointer'}}>Save</button>
+                    </div>
+                    {localStorage.getItem(k)&&<div style={{fontSize:11,color:C.green,marginTop:3}}>✓ Saved</div>}
                   </div>
                 ))}
               </div>
               <div style={cardStyle}>
                 <div style={headerStyle}>About</div>
                 <div style={{fontSize:14,color:C.text2,lineHeight:1.8}}>
-                  <div style={{marginBottom:8}}><strong style={{color:C.gold}}>Accra Terminal V16</strong></div>
+                  <div style={{marginBottom:8}}><strong style={{color:C.gold}}>Accra Terminal V17</strong></div>
                   <div>Africa's #1 Financial Intelligence Platform</div>
                   <div style={{marginTop:8,color:C.text3}}>Built by HydroLife Studios</div>
                   <div style={{color:C.text3}}>Ashanti Region, Ghana</div>

@@ -4,12 +4,9 @@ from urllib.parse import urlencode
 
 logging.basicConfig(filename="bot.log", level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s")
-
 def log(msg, level="info"):
-    print(msg)
-    getattr(logging, level)(msg)
 
-# ── HYPERLIQUID ───────────────────────────────────────────
+# ── HYPERLIQUID AUTO-TRADER ──────────────────────────────
 try:
     from hyperliquid_trader import hl_place_order, hl_get_balance, hl_get_positions, hl_close_position
     HL_ENABLED = True
@@ -22,201 +19,40 @@ def hl_trade(signal, coin="SOL", pct=0.5):
     try:
         bal = hl_get_balance()
         if bal < 5:
-            log("[HL] Balance too low: $%.2f" % bal)
+            log(f"[HL] Balance too low: ${bal:.2f}")
             return
         amount = round(bal * pct, 2)
         is_buy = signal.upper() == "BUY"
         result = hl_place_order(coin, is_buy, amount, leverage=2)
-        log("[HL] %s %s $%.2f status=%s" % (signal, coin, amount, result.get("status")))
+        log(f"[HL] {signal} {coin} ${amount} result={result.get('status')}")
     except Exception as e:
-        log("[HL] Trade error: %s" % e)
+        log(f"[HL] Trade error: {e}")
+# ── END HYPERLIQUID ──────────────────────────────────────
 
-# ── TRADE.XYZ ────────────────────────────────────────────
+# ── HYPERLIQUID AUTO-TRADER ──────────────────────────────
 try:
-    from tradexyz_trader import xyz_place_order, xyz_get_balance, xyz_get_positions, xyz_close_position
-    XYZ_ENABLED = True
-except Exception as _xyz_err:
-    XYZ_ENABLED = False
+    from hyperliquid_trader import hl_place_order, hl_get_balance, hl_get_positions, hl_close_position
+    HL_ENABLED = True
+except Exception as _hl_err:
+    HL_ENABLED = False
 
-def xyz_score_asset(ticker, prices, closes_cache):
-    """Score a trade.xyz asset using technicals. Returns (score, signal)."""
-    import statistics
-    try:
-        price = prices.get(ticker, 0)
-        if price <= 0:
-            return 0, "HOLD"
-        # Get closes from cache or skip
-        closes = closes_cache.get(ticker, [])
-        if len(closes) < 20:
-            return 0, "HOLD"
-        score = 0
-        signal = "HOLD"
-        # RSI
-        try:
-            rsi = calc_rsi(closes)
-            if rsi < 30:
-                score += 30
-            elif rsi < 40:
-                score += 15
-            elif rsi > 70:
-                score -= 30
-            elif rsi > 60:
-                score -= 15
-        except:
-            pass
-        # EMA trend
-        try:
-            ema20 = calc_ema(closes, 20)
-            ema50 = calc_ema(closes, 50)
-            if ema20[-1] > ema50[-1]:
-                score += 10
-            else:
-                score -= 10
-        except:
-            pass
-        # MACD
-        try:
-            macd, signal_line, _ = calc_macd(closes)
-            if macd[-1] > signal_line[-1]:
-                score += 15
-            else:
-                score -= 10
-        except:
-            pass
-        # BB position
-        try:
-            upper, mid, lower = calc_bb(closes)
-            if price < lower[-1]:
-                score += 20
-            elif price > upper[-1]:
-                score -= 20
-        except:
-            pass
-        if score >= 25:
-            signal = "BUY"
-        elif score <= -25:
-            signal = "SELL"
-        return score, signal
-    except Exception as e:
-        return 0, "HOLD"
-
-def xyz_get_closes(ticker, limit=60):
-    """Fetch OHLCV closes for a trade.xyz asset via Hyperliquid candles."""
-    try:
-        import time
-        now_ms  = int(time.time() * 1000)
-        start   = now_ms - limit * 60 * 60 * 1000  # hourly candles
-        r = requests.post("https://api.hyperliquid.xyz/info", json={
-            "type":       "candleSnapshot",
-            "req": {
-                "coin":       "xyz:" + ticker,
-                "interval":   "1h",
-                "startTime":  start,
-                "endTime":    now_ms
-            }
-        }, timeout=10)
-        candles = r.json()
-        if isinstance(candles, list) and len(candles) > 0:
-            return [float(c["c"]) for c in candles]
-    except:
-        pass
-    return []
-
-def xyz_scan_and_trade():
-    """Independent intelligence scan of all trade.xyz assets."""
-    if not XYZ_ENABLED:
+def hl_trade(signal, coin="SOL", pct=0.5):
+    if not HL_ENABLED:
         return
     try:
-        bal = xyz_get_balance()
-        if bal < 10:
-            log("[XYZ] Balance too low: $%.2f - skipping scan" % bal)
-            return
-
-        # Get all prices
-        from tradexyz_trader import _get_xyz_meta, xyz_place_order as _xyz_order
-        meta      = _get_xyz_meta()
-        all_tickers = [u["name"].replace("xyz:", "") for u in meta["universe"]]
-
-        log("[XYZ] Scanning %d assets..." % len(all_tickers))
-
-        best_score  = 0
-        best_ticker = None
-        best_signal = "HOLD"
-        prices      = {}
-        closes_cache = {}
-
-        for t in all_tickers:
-            try:
-                price = xyz_get_price(t)
-                if price <= 0:
-                    continue
-                prices[t] = price
-                closes = xyz_get_closes(t)
-                if closes:
-                    closes_cache[t] = closes
-            except:
-                continue
-
-        for t, price in prices.items():
-            score, sig = xyz_score_asset(t, prices, closes_cache)
-            if sig != "HOLD" and abs(score) > abs(best_score):
-                best_score  = score
-                best_ticker = t
-                best_signal = sig
-
-        if best_ticker and best_signal != "HOLD":
-            amount = round(bal * 0.4, 2)
-            is_buy = best_signal == "BUY"
-            log("[XYZ] BEST OPPORTUNITY: %s %s score=%d" % (best_signal, best_ticker, best_score))
-            result = xyz_place_order(best_ticker, is_buy, amount, leverage=3)
-            log("[XYZ] %s %s $%.2f status=%s" % (best_signal, best_ticker, amount, result.get("status")))
-            telegram("<b>XYZ %s</b>\n%s @ $%.2f\nScore:%d Margin:$%.2f" % (
-                best_signal, best_ticker, prices.get(best_ticker, 0), best_score, amount))
-        else:
-            log("[XYZ] No strong opportunity found this cycle")
-
-    except Exception as e:
-        log("[XYZ] Scan error: %s" % e)
-
-def xyz_trade(signal, ticker=None, pct=0.4, _cycle=[0]):
-    """Called after crypto signal - mirrors on best xyz asset."""
-    if not XYZ_ENABLED:
-        return
-    try:
-        bal = xyz_get_balance()
-        if bal < 10:
-            log("[XYZ] Balance too low: $%.2f" % bal)
+        bal = hl_get_balance()
+        if bal < 5:
+            log(f"[HL] Balance too low: ${bal:.2f}")
             return
         amount = round(bal * pct, 2)
         is_buy = signal.upper() == "BUY"
-        # If no ticker specified, find best opportunity
-        if ticker is None:
-            from tradexyz_trader import _get_xyz_meta
-            meta    = _get_xyz_meta()
-            tickers = [u["name"].replace("xyz:", "") for u in meta["universe"]]
-            closes_cache = {}
-            prices_map   = {}
-            for t in tickers[:20]:  # quick scan top 20
-                try:
-                    p = xyz_get_price(t)
-                    if p > 0:
-                        prices_map[t] = p
-                        c = xyz_get_closes(t, limit=30)
-                        if c:
-                            closes_cache[t] = c
-                except:
-                    pass
-            best_t, best_s = None, 0
-            for t in prices_map:
-                sc, sig = xyz_score_asset(t, prices_map, closes_cache)
-                if sig == signal and sc > best_s:
-                    best_s = sc
-                    best_t = t
-            ticker = best_t or "GOLD"
-        result = xyz_place_order(ticker, is_buy, amount, leverage=3)
-        log("[XYZ] %s %s $%.2f status=%s" % (signal, ticker, amount, result.get("status")))
+        result = hl_place_order(coin, is_buy, amount, leverage=2)
+        log(f"[HL] {signal} {coin} ${amount} result={result.get('status')}")
     except Exception as e:
-        log("[XYZ] Trade error: %s" % e)
+        log(f"[HL] Trade error: {e}")
+# ── END HYPERLIQUID ──────────────────────────────────────
+    print(msg)
+    getattr(logging, level)(msg)
 
 BINANCE_KEY    = os.getenv("BINANCE_KEY", "")
 BINANCE_SECRET = os.getenv("BINANCE_SECRET", "")
@@ -237,9 +73,6 @@ GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 LOG_FILE       = "trade_log.json"
-INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
-DREAM_EVERY    = 20
-dream_counter  = 0
 STATUS_FILE    = "bot_status.json"
 STRATEGY_FILE  = "bot_strategy.json"
 
@@ -248,13 +81,13 @@ DEFAULT_STRATEGY = {
     "min_confidence": 22,
     "max_open_trades": 3,
     "crypto_enabled": True,
-    "stocks_enabled": True,
+    "stocks_enabled": False,
     "hfm_enabled": False,
     "top_n_crypto": 30,
     "top_n_stocks": 30,
     "sl_multiplier": 1.0,
     "tp_multiplier": 1.0,
-    "avoid_assets": ["STOUSDT","SOLVUSDT","BIFIUSDT","NIGHTUSDT","DUSDT","UUSDT","币安人生USDT"],
+    "avoid_assets": [],
     "prefer_assets": [],
     "market_condition": "neutral",
     "updated_by": "default",
@@ -372,7 +205,7 @@ FAILSAFE_STRATEGY = {
     "min_confidence": 60,    # Very high threshold
     "max_open_trades": 2,    # Limit exposure
     "crypto_enabled": True,
-    "stocks_enabled": True, # Disable stocks in failsafe
+    "stocks_enabled": False, # Disable stocks in failsafe
     "hfm_enabled": False,
     "top_n_crypto": 5,       # Only top 5 safest coins
     "top_n_stocks": 0,
@@ -460,7 +293,7 @@ def get_top_crypto(n=20):
     try:
         r = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=10)
         r.raise_for_status()
-        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT", "DUSDT", "ZECUSDT", "NIGHTUSDT"}
+        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT"}
         pairs = [t for t in r.json()
                  if t["symbol"].endswith("USDT")
                  and t["symbol"] not in skip
@@ -1487,88 +1320,6 @@ def unified_signal(symbol, closes, asset_type, strategy):
     }
 
 
-
-def load_history():
-    try:
-        with open(LOG_FILE) as f:
-            return json.load(f)
-    except:
-        return []
-
-def load_insights():
-    try:
-        with open(INSIGHTS_FILE) as f:
-            return json.load(f)
-    except:
-        return None
-
-def run_dream_cycle():
-    """Analyze trade history and return actionable directives."""
-    from datetime import timezone, timedelta
-    h = load_history()
-    if len(h) < 5:
-        log("  [DREAM] Need 5+ trades to analyze (have %d)" % len(h))
-        return None
-
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    recent   = [t for t in h if t.get("timestamp","") > cutoff] or h[-20:]
-    settled  = [t for t in recent if t.get("outcome") in ("WIN","LOSS")]
-    if not settled:
-        log("  [DREAM] No settled trades yet")
-        return None
-
-    wins     = [t for t in settled if t["outcome"] == "WIN"]
-    win_rate = len(wins) / len(settled)
-
-    asset_pnl = {}
-    for t in recent:
-        a = t.get("asset", t.get("symbol", "?"))
-        asset_pnl.setdefault(a, []).append(t.get("profit_pct", 0))
-    asset_avg = {a: sum(v)/len(v) for a, v in asset_pnl.items() if v}
-
-    worst = min(asset_avg, key=asset_avg.get) if asset_avg else None
-    best  = max(asset_avg, key=asset_avg.get) if asset_avg else None
-
-    streak = 0
-    for t in reversed(settled):
-        if t["outcome"] == "LOSS": streak += 1
-        else: break
-
-    directives = {
-        "avoid_asset":           worst if asset_avg.get(worst, 0) < -2 else None,
-        "prefer_asset":          best  if asset_avg.get(best,  0) >  1 else None,
-        "go_defensive":          streak >= 3,
-        "recommended_min_score": 25 if win_rate < 0.4 else 20 if win_rate < 0.5 else 15,
-    }
-
-    insights = {
-        "generated_at":        datetime.now(timezone.utc).isoformat(),
-        "win_rate_pct":        round(win_rate * 100, 1),
-        "win_rate":            round(win_rate, 3),
-        "wins":                len(wins),
-        "losses":              len(settled) - len(wins),
-        "current_losing_streak": streak,
-        "best_asset":          best,
-        "worst_asset":         worst,
-        "asset_avg_pnl":       {k: round(v, 2) for k, v in asset_avg.items()},
-        "directives":          directives,
-    }
-
-    try:
-        with open(INSIGHTS_FILE, "w") as f:
-            json.dump(insights, f, indent=2)
-    except:
-        pass
-
-    log("  [DREAM] win_rate=%.0f%% streak=%d avoid=%s best=%s" % (
-        win_rate*100, streak, directives["avoid_asset"], best))
-
-    if streak >= 3:
-        telegram("<b>DREAM ALERT</b>\n%d consecutive losses\nGoing defensive\nAvoiding: %s" % (
-            streak, directives["avoid_asset"]))
-
-    return insights
-
 def register_trade(symbol, price, cfg, market):
     open_trades[symbol] = {
         "entry":      price,
@@ -1627,16 +1378,6 @@ def log_trade(entry):
 
 
 def execute(symbol, signal, price, cfg, conf, market):
-    # Check dream directives
-    _ins = load_insights()
-    if _ins:
-        _dir = _ins.get("directives", {})
-        if _dir.get("avoid_asset") and _dir["avoid_asset"] in symbol:
-            log("  [DREAM] Blocking %s - poor performer" % symbol)
-            return False
-        if _dir.get("go_defensive") and conf < 50:
-            log("  [DREAM] Defensive mode - skipping low conf signal (%d%%)" % conf)
-            return False
     try:
         if market == "crypto":
             coin = symbol.replace("USDT", "")
@@ -1658,8 +1399,6 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if prec == 0:
                     qty = int(qty)
                 order = place_crypto_order(symbol, "BUY", qty)
-                hl_trade("BUY", "SOL")
-                xyz_trade("BUY", ticker=None)   # rotates: commodity→stock→forex
                 log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 register_trade(symbol, price, cfg, "crypto")
                 telegram(
@@ -1676,8 +1415,6 @@ def execute(symbol, signal, price, cfg, conf, market):
                     log(f"  SKIP {symbol}: no balance")
                     return False
                 order = place_crypto_order(symbol, "SELL", qty)
-                hl_trade("SELL", "SOL")
-                xyz_trade("SELL", ticker=None)  # rotates: commodity→stock→forex
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 open_trades.pop(symbol, None)
                 telegram(f"<b>CRYPTO SELL</b>\n{symbol} @ ${price:,.4f}\nQty:{qty}")
@@ -2490,16 +2227,6 @@ def main():
         except Exception as e:
             log(f"[Cycle error] {e}", "error")
             telegram(f"<b>CYCLE ERROR</b>\n{e}")
-        # ── Dream cycle ──────────────────────────────────
-        global dream_counter
-        dream_counter += 1
-        if dream_counter >= DREAM_EVERY:
-            dream_counter = 0
-            run_dream_cycle()
-
-        # ── trade.xyz independent scan ────────────────────
-        xyz_scan_and_trade()
-
         log(f"\n  Sleeping {SLEEP_SECS}s...")
         # Auto-reconnect if internet drops
     for attempt in range(SLEEP_SECS):
