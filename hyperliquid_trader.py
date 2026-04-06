@@ -51,10 +51,20 @@ def _round_price(price, is_buy):
 
 def hl_get_balance():
     try:
+        import requests
+        # Unified account - check spot balance
+        r = requests.post("https://api.hyperliquid.xyz/info",
+            json={"type": "spotClearinghouseState", "user": HL_WALLET})
+        balances = r.json().get("balances", [])
+        for b in balances:
+            if b.get("coin") == "USDC":
+                usdc = float(b.get("total", 0))
+                log.info(f"[HL] Balance: ${usdc:.2f} USDC")
+                return usdc
+        # Fallback to perp
         info, _ = _get_clients()
         state   = info.user_state(HL_WALLET)
         usdc    = float(state.get("marginSummary", {}).get("accountValue", 0))
-        log.info(f"[HL] Balance: ${usdc:.2f} USDC")
         return usdc
     except Exception as e:
         log.error(f"[HL] Balance check failed: {e}")

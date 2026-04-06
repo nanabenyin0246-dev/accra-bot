@@ -75,9 +75,13 @@ def xyz_get_all_prices() -> dict:
 
 def xyz_get_balance() -> float:
     try:
-        info, _ = _get_clients()
-        state   = info.user_state(HL_WALLET)
-        return float(state.get("marginSummary", {}).get("accountValue", 0))
+        r = requests.post("https://api.hyperliquid.xyz/info",
+            json={"type": "spotClearinghouseState", "user": HL_WALLET},
+            timeout=10)
+        for b in r.json().get("balances", []):
+            if b.get("coin") == "USDC":
+                return float(b.get("total", 0))
+        return 0.0
     except Exception as e:
         log.error(f"[XYZ] Balance failed: {e}")
         return 0.0

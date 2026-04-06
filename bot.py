@@ -16,7 +16,7 @@ try:
 except Exception as _hl_err:
     HL_ENABLED = False
 
-def hl_trade(signal, coin="SOL", pct=0.5):
+def hl_trade(signal, coin="SOL", pct=0.2):
     if not HL_ENABLED:
         return
     try:
@@ -1657,9 +1657,14 @@ def execute(symbol, signal, price, cfg, conf, market):
                 # Round to correct precision
                 if prec == 0:
                     qty = int(qty)
-                order = place_crypto_order(symbol, "BUY", qty)
                 hl_trade("BUY", "SOL")
-                xyz_trade("BUY", ticker=None)   # rotates: commodity→stock→forex
+                # Only XYZ trade if less than 2 open XYZ positions
+                from tradexyz_trader import xyz_get_positions
+                if len(xyz_get_positions()) < 2:
+                    xyz_trade("BUY", ticker=None)
+                else:
+                    log("[XYZ] Max positions reached - skipping")
+                order = place_crypto_order(symbol, "BUY", qty)
                 log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 register_trade(symbol, price, cfg, "crypto")
                 telegram(
@@ -1675,9 +1680,13 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if qty < 0.00001:
                     log(f"  SKIP {symbol}: no balance")
                     return False
-                order = place_crypto_order(symbol, "SELL", qty)
                 hl_trade("SELL", "SOL")
-                xyz_trade("SELL", ticker=None)  # rotates: commodity→stock→forex
+                from tradexyz_trader import xyz_get_positions
+                if len(xyz_get_positions()) < 2:
+                    xyz_trade("SELL", ticker=None)
+                else:
+                    log("[XYZ] Max positions reached - skipping")
+                order = place_crypto_order(symbol, "SELL", qty)
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 open_trades.pop(symbol, None)
                 telegram(f"<b>CRYPTO SELL</b>\n{symbol} @ ${price:,.4f}\nQty:{qty}")
