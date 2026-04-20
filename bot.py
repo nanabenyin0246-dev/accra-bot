@@ -1679,6 +1679,9 @@ def get_trump_analysis_score():
         if fg_val < 15 and weekly_chg < -10:
             return +20, "TRUMP STEP 8: Max pressure before deal - Smart money BUY zone"
 
+        # IRAN Apr 2026: fragile ceasefire, Hormuz still contested
+        if fg_val < 35 and weekly_chg < -5:
+            return +15, 'IRAN STEP 7: Fragile ceasefire - accumulate'
         # STEP 7: Conditional de-escalation starting
         # Trump language softens, deal coming soon
         if fg_val < 20 and weekly_chg < -5:
@@ -2620,7 +2623,7 @@ def apply_multidim_intelligence(sym,signal,score,confidence,market):
             _txt=_r.text.lower() if _r.ok else ""
             _hz_val="CLOSED" if any(k in _txt for k in ["closed","suspended","blocked"]) else                     "DISRUPTED" if any(k in _txt for k in ["disrupted","warning","restricted"]) else "OPEN"
             _hz_ts=now
-        except: pass
+        except: _hz_val="RESTRICTED";_hz_ts=now
     if _hz_val in("CLOSED","DISRUPTED"):
         _osig=55 if _hz_val=="CLOSED" else 25
         if is_oil and signal=="BUY": adj+=_osig;ac+=15;reasons.append(f"HORMUZ {_hz_val} +{_osig}")
