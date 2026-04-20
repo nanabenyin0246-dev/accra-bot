@@ -37,6 +37,10 @@ try:
     XYZ_ENABLED = True
 except Exception as _xyz_err:
     XYZ_ENABLED = False
+try:
+    import eth_account
+except ImportError:
+    XYZ_ENABLED = False
 
 
 # Stub xyz functions - always defined, overridden if import succeeds
@@ -771,6 +775,13 @@ def get_crypto_balance(asset):
 
 def place_crypto_order(symbol, side, quantity):
     import math
+    if side == "BUY":
+        avail = get_crypto_balance("USDT")
+        price = float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=5).json()["price"])
+        max_qty = math.floor((avail * 0.95) / price * 10**crypto_precision(symbol)) / 10**crypto_precision(symbol)
+        if max_qty <= 0:
+            raise Exception(f"Insufficient USDT for {symbol}: have ${avail:.2f}")
+        quantity = min(quantity, max_qty)
     prec = crypto_precision(symbol)
     quantity = math.floor(quantity * 10**prec) / 10**prec
     if quantity <= 0:
