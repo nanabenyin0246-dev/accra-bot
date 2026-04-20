@@ -657,6 +657,7 @@ def get_risk(strategy):
 GIST_ID = "4f5f6918288ddaec0a1fc998af3e6f99"
 
 def push_status(data):
+    log(f"  [DEBUG] GITHUB_TOKEN={GITHUB_TOKEN[:8] if GITHUB_TOKEN else None}")
     try:
         import base64
         content_str = json.dumps(data, indent=2)
