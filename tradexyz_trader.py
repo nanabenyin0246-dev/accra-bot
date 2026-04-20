@@ -9,3 +9,6 @@ STOCKS = []
 COMMODITIES = []
 FOREX = []
 INDICES = []
+def xyz_get_positions(): return []
+def xyz_close_position(t): return None
+def xyz_get_open_positions(): return []
