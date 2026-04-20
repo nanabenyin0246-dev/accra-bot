@@ -44,6 +44,7 @@ except ImportError:
 
 
 # Stub xyz functions - always defined, overridden if import succeeds
+def xyz_get_positions(): return []
 def xyz_get_balance(): return 0.0
 def xyz_free_margin(): return 0.0
 def xyz_get_price(s): return 0.0
