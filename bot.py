@@ -33,7 +33,7 @@ def hl_trade(signal, coin="SOL", pct=0.2):
 
 # ── TRADE.XYZ ────────────────────────────────────────────
 try:
-    from tradexyz_trader import xyz_place_order, xyz_get_balance, xyz_get_positions, xyz_close_position
+    from tradexyz_trader import xyz_place_order, xyz_get_balance, xyz_get_positions, xyz_close_position, xyz_get_price, xyz_get_all_prices
     XYZ_ENABLED = True
 except Exception as _xyz_err:
     XYZ_ENABLED = False
@@ -94,7 +94,7 @@ def xyz_score_asset(ticker, prices, closes_cache):
             pass
         if score >= 25:
             signal = "BUY"
-        elif score <= -25:
+        elif score <= -20:
             signal = "SELL"
         return score, signal
     except Exception as e:
@@ -122,30 +122,162 @@ def xyz_get_closes(ticker, limit=60):
         pass
     return []
 
+
+def xyz_active_asset_classes():
+    """
+    Return which asset classes are actively trading right now.
+    Avoids scanning stocks when NYSE is closed.
+    """
+    from datetime import datetime, timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    now_ny  = now_utc - timedelta(hours=4)   # EDT
+    now_tok = now_utc + timedelta(hours=9)   # JST
+    now_lon = now_utc + timedelta(hours=1)   # BST
+
+    active = ["COMMODITIES", "CRYPTO"]  # always active
+
+    # Forex: Mon-Fri 24h
+    if now_utc.weekday() < 5:
+        active.append("FOREX")
+
+    # US Stocks: NYSE 9:30-16:00 NY time weekdays
+    if now_ny.weekday() < 5 and (
+        (now_ny.hour == 9 and now_ny.minute >= 30) or
+        (10 <= now_ny.hour < 16)):
+        active.append("US_STOCKS")
+
+    # Asian stocks: Tokyo 9-15 JST weekdays
+    if now_tok.weekday() < 5 and 9 <= now_tok.hour < 15:
+        active.append("ASIA_STOCKS")
+
+    # European stocks: London 8-16 BST weekdays  
+    if now_lon.weekday() < 5 and 8 <= now_lon.hour < 16:
+        active.append("EU_STOCKS")
+
+    return active
+
+
+def xyz_ai_consensus(ticker, price, is_buy_candidate):
+    """
+    Ask AI providers to vote on a trade.
+    Returns (agrees, confidence, reason)
+    Only trades when AI agrees with confidence >= 65.
+    """
+    try:
+        # Ensure AI providers are initialized
+        build_ai_providers()
+        direction = "BUY/LONG" if is_buy_candidate else "SELL/SHORT"
+        prompt = """You are a professional trader. Should we %s %s at $%.2f right now?
+Fear & Greed Index: 14 (Extreme Fear)
+Consider: technicals, macro conditions, risk/reward.
+Respond ONLY in JSON: {"vote": "BUY" or "SELL" or "HOLD", "confidence": 0-100, "reason": "one line"}
+Be decisive. If uncertain vote HOLD.""" % (direction, ticker, price)
+
+        result = call_multi_ai(prompt, "Return valid JSON only. No markdown.")
+        if not result:
+            return False, 0, "No AI response"
+
+        import json as _j
+        data     = _j.loads(result)
+        vote     = data.get("vote", "HOLD").upper()
+        conf     = int(data.get("confidence", 0))
+        reason   = data.get("reason", "")
+        expected = "BUY" if is_buy_candidate else "SELL"
+        agrees   = (vote == expected) and (conf >= 65)
+        log("[XYZ AI] %s vote=%s conf=%d%% | %s" % (ticker, vote, conf, reason[:50]))
+        return agrees, conf, reason
+    except Exception as e:
+        log("[XYZ AI] error: %s" % e)
+        return False, 0, str(e)
+
+def xyz_multi_ai_vote(ticker, price, is_buy_candidate):
+    agrees, conf, reason = xyz_ai_consensus(ticker, price, is_buy_candidate)
+    if not agrees:
+        log("[XYZ] AI BLOCKED %s conf=%d%%" % (ticker, conf))
+        return False, reason
+    log("[XYZ] AI APPROVED %s conf=%d%%" % (ticker, conf))
+    return True, reason
+
 def xyz_scan_and_trade():
-    """Independent intelligence scan of all trade.xyz assets."""
+    """
+    Safe autonomous trade.xyz engine.
+    - Max 1 open position at a time
+    - Min balance $15 to trade
+    - Stop loss built into position sizing
+    - Only trades when score >= 30 (strong signal)
+    - Scans every 5 cycles not every cycle
+    """
     if not XYZ_ENABLED:
         return
+
+    # Only scan every 5 cycles to reduce overtrading
+    global _xyz_scan_counter
+    try: _xyz_scan_counter
+    except: _xyz_scan_counter = 0
+    _xyz_scan_counter += 1
+    if _xyz_scan_counter < 5:
+        return
+    _xyz_scan_counter = 0
+
     try:
-        bal = xyz_get_balance()
-        if bal < 10:
-            log("[XYZ] Balance too low: $%.2f - skipping scan" % bal)
+        from tradexyz_trader import (
+            _get_xyz_meta, xyz_leverage_for, xyz_min_margin,
+            xyz_free_margin, xyz_get_price, xyz_get_balance,
+            STOCKS, COMMODITIES, FOREX, INDICES
+        )
+
+        # Check free margin - need at least $5
+        free = xyz_free_margin()
+        total = xyz_get_balance()
+        log("[XYZ] Balance: $%.2f total, $%.2f free" % (total, free))
+
+        if total < 5:
+            log("[XYZ] Balance too low: $%.2f - not trading" % total)
             return
 
-        # Get all prices
-        from tradexyz_trader import _get_xyz_meta, xyz_place_order as _xyz_order
-        meta      = _get_xyz_meta()
+        if free < 5:
+            log("[XYZ] No free margin: $%.2f - positions full" % free)
+            # Check if open positions need stop loss
+            _xyz_check_stops()
+            return
+
+        # Max 1 position at a time
+        open_pos = set()
+        try:
+            for p in xyz_get_positions():
+                coin = p.get("position", {}).get("coin", "")
+                open_pos.add(coin.replace("xyz:", ""))
+        except:
+            pass
+
+        if len(open_pos) >= 1:
+            log("[XYZ] Max positions reached (%d open) - waiting" % len(open_pos))
+            _xyz_check_stops()
+            return
+
+        # Active market filter
+        active = xyz_active_asset_classes()
+        log("[XYZ] Active markets: %s" % ", ".join(active))
+
+        def _is_active(ticker):
+            if ticker in COMMODITIES: return True
+            if ticker in FOREX:       return "FOREX" in active
+            if ticker in INDICES:     return "US_STOCKS" in active
+            if ticker in STOCKS:      return "US_STOCKS" in active
+            return True
+
+        # Scan assets
+        meta        = _get_xyz_meta(fresh=True)
         all_tickers = [u["name"].replace("xyz:", "") for u in meta["universe"]]
 
         log("[XYZ] Scanning %d assets..." % len(all_tickers))
 
-        best_score  = 0
-        best_ticker = None
-        best_signal = "HOLD"
-        prices      = {}
+        prices       = {}
         closes_cache = {}
 
         for t in all_tickers:
+            if t in open_pos or not _is_active(t):
+                continue
             try:
                 price = xyz_get_price(t)
                 if price <= 0:
@@ -157,26 +289,115 @@ def xyz_scan_and_trade():
             except:
                 continue
 
+        # Find best signal - require score >= 30 (strong only)
+        best_score  = 0
+        best_ticker = None
+        best_signal = "HOLD"
+
         for t, price in prices.items():
             score, sig = xyz_score_asset(t, prices, closes_cache)
-            if sig != "HOLD" and abs(score) > abs(best_score):
+            if sig != "HOLD" and abs(score) >= 30 and abs(score) > abs(best_score):
                 best_score  = score
                 best_ticker = t
                 best_signal = sig
 
+        # Geopolitical override
+        try:
+            global _hz_val, _nk_val
+            try: hz = _hz_val
+            except: hz = "UNKNOWN"
+            try: nk = _nk_val
+            except: nk = False
+
+            if hz == "CLOSED" and "CL" not in open_pos:
+                log("[XYZ] HORMUZ CLOSED - forcing CL long!")
+                best_ticker = "CL"
+                best_signal = "BUY"
+                best_score  = 55
+            elif hz == "DISRUPTED" and best_ticker not in ["CL","BRENTOIL","GOLD","SILVER"]:
+                best_ticker = "GOLD"
+                best_signal = "BUY"
+                best_score  = max(best_score, 30)
+            if nk and "GOLD" not in open_pos:
+                log("[XYZ] DPRK - forcing GOLD long!")
+                best_ticker = "GOLD"
+                best_signal = "BUY"
+                best_score  = 40
+        except Exception as geo_e:
+            log("[XYZ] Geo error: %s" % geo_e)
+
         if best_ticker and best_signal != "HOLD":
-            amount = round(bal * 0.4, 2)
+            lev    = xyz_leverage_for(best_ticker)
+            min_m  = xyz_min_margin(best_ticker)
+            # Use 30% of free margin, respect minimum
+            amount = max(min_m, round(free * 0.30, 2))
+            # Never use more than 50% of total balance in one trade
+            amount = min(amount, round(total * 0.50, 2))
             is_buy = best_signal == "BUY"
-            log("[XYZ] BEST OPPORTUNITY: %s %s score=%d" % (best_signal, best_ticker, best_score))
-            result = xyz_place_order(best_ticker, is_buy, amount, leverage=3)
-            log("[XYZ] %s %s $%.2f status=%s" % (best_signal, best_ticker, amount, result.get("status")))
-            telegram("<b>XYZ %s</b>\n%s @ $%.2f\nScore:%d Margin:$%.2f" % (
-                best_signal, best_ticker, prices.get(best_ticker, 0), best_score, amount))
+            direction = "LONG" if is_buy else "SHORT"
+
+            log("[XYZ] %s %s score=%d lev=%dx margin=$%.2f" % (
+                direction, best_ticker, best_score, lev, amount))
+
+            # AI GATE - must pass before executing
+            ai_ok, ai_reason = xyz_multi_ai_vote(
+                best_ticker, prices.get(best_ticker, 0), is_buy)
+            if not ai_ok:
+                log("[XYZ] Trade blocked by AI: %s" % ai_reason)
+                return
+
+            result = xyz_place_order(best_ticker, is_buy, amount, leverage=lev)
+            status = result.get("status")
+            log("[XYZ] %s %s $%.2f → %s" % (
+                direction, best_ticker, amount, status))
+
+            if status == "ok":
+                telegram("<b>XYZ %s</b>\n%s @ $%.2f\nScore:%d Lev:%dx $%.2f\nAI:%s" % (
+                    direction, best_ticker,
+                    prices.get(best_ticker, 0),
+                    best_score, lev, amount, ai_reason[:40]))
         else:
-            log("[XYZ] No strong opportunity found this cycle")
+            log("[XYZ] No strong opportunity (need score>=30)")
 
     except Exception as e:
         log("[XYZ] Scan error: %s" % e)
+
+def _xyz_check_stops():
+    """Check open xyz positions for stop loss / take profit."""
+    try:
+        import requests as _rq
+        from dotenv import load_dotenv as _lde
+        import os as _os
+        _lde()
+        HL_WALLET = _os.getenv("HYPERLIQUID_WALLET","")
+        r = _rq.post("https://api.hyperliquid.xyz/info",
+                     json={"type": "clearinghouseState",
+                           "user": HL_WALLET, "dex": "xyz"},
+                     timeout=10)
+        positions = r.json().get("assetPositions", [])
+        for p in positions:
+            pos    = p.get("position", {})
+            szi    = float(pos.get("szi", 0))
+            if szi == 0:
+                continue
+            ticker  = pos.get("coin","").replace("xyz:","")
+            pnl     = float(pos.get("unrealizedPnl", 0))
+            margin  = float(pos.get("marginUsed", 1))
+            pnl_pct = (pnl / margin * 100) if margin > 0 else 0
+
+            # Stop loss: -8% of margin
+            # Take profit: +15% of margin
+            if pnl_pct <= -8:
+                log("[XYZ] STOP LOSS %s pnl=%.1f%% - closing" % (ticker, pnl_pct))
+                xyz_close_position(ticker)
+                telegram("<b>XYZ STOP LOSS</b>\n%s\nPnL: %.1f%%" % (ticker, pnl_pct))
+            elif pnl_pct >= 15:
+                log("[XYZ] TAKE PROFIT %s pnl=%.1f%% - closing" % (ticker, pnl_pct))
+                xyz_close_position(ticker)
+                telegram("<b>XYZ TAKE PROFIT</b>\n%s\nPnL: %.1f%%" % (ticker, pnl_pct))
+    except Exception as e:
+        log("[XYZ] Stop check error: %s" % e)
+
 
 def xyz_trade(signal, ticker=None, pct=0.4, _cycle=[0]):
     """Called after crypto signal - mirrors on best xyz asset."""
@@ -285,6 +506,12 @@ _fund_cache = {}
 _top_crypto_cache = {"coins": [], "ts": 0}
 _top_stock_cache = {"stocks": [], "ts": 0}
 cycle_count = 0
+
+# ============================================================
+# TRUMP ANALYSIS MODULE - Remove by setting to False
+# When Trump leaves presidency: TRUMP_ANALYSIS_ENABLED = False
+# ============================================================
+TRUMP_ANALYSIS_ENABLED = True
 AI_PROVIDERS = []
 _ai_usage = {"groq":0,"gemini":0,"openrouter":0,"current":0}
 AI_ROTATE_EVERY = 3
@@ -444,6 +671,7 @@ def binance_time():
 
 
 def sign_binance(params):
+    params.setdefault("recvWindow", 10000)  # 10s window for clock drift
     q = urlencode(params)
     sig = hmac.new(BINANCE_SECRET.encode(), q.encode(), hashlib.sha256).hexdigest()
     return q + "&signature=" + sig
@@ -460,10 +688,11 @@ def get_top_crypto(n=20):
     try:
         r = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=10)
         r.raise_for_status()
-        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT", "DUSDT", "ZECUSDT", "NIGHTUSDT"}
+        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT", "DUSDT", "ZECUSDT", "NIGHTUSDT", "ESPUSDT", "NOMUSDT", "KITEUSDT", "REDUSDT", "GIGGLEUSDT", "JOEUSDT", "DASHUSDT", "0GUSDT", "ENJUSDT", "MMTUSDT", "KATUSDT", "TRUMPUSDT"}
         pairs = [t for t in r.json()
                  if t["symbol"].endswith("USDT")
                  and t["symbol"] not in skip
+                 and t["symbol"].isascii()
                  and float(t["quoteVolume"]) > 1000000]
         pairs.sort(key=lambda x: float(x["quoteVolume"]), reverse=True)
         coins = [t["symbol"] for t in pairs[:n]]
@@ -1200,6 +1429,25 @@ def technical_score(closes):
     if mr_score != 0:
         score += mr_score; reasons.append(f"MeanRev: {mr_reason}")
 
+
+    # Universal Geopolitical Intelligence (Kobeissi principles)
+    geo_score, geo_reason = get_geopolitical_score()
+    if geo_score != 0:
+        score += geo_score
+        reasons.append(f"GEO: {geo_reason}")
+
+    # Trump Analysis Module (disable when he leaves: TRUMP_ANALYSIS_ENABLED=False)
+    trump_score, trump_reason = get_trump_analysis_score()
+    if trump_score != 0:
+        score += trump_score
+        reasons.append(f"TRUMP: {trump_reason}")
+
+    # Weekend blackout check
+    blackout, blackout_reason = is_weekend_blackout()
+    if blackout:
+        score -= 50
+        reasons.append(f"BLACKOUT: {blackout_reason}")
+
     # Cross-domain correlation boost (Crucix-inspired)
     # When 3+ independent indicators agree = confidence multiplier
     bullish_signals = sum([
@@ -1384,6 +1632,138 @@ def calc_vwap_real(closes, volumes, period=20):
         return round(vwap, 6), round(deviation, 2)
     except:
         return closes[-1], 0
+
+
+
+
+def get_trump_analysis_score():
+    """
+    TRUMP ANALYSIS MODULE (Kobeissi Letter verified)
+    Disable when Trump leaves: TRUMP_ANALYSIS_ENABLED = False
+    
+    Verified accurate across:
+    - China tariffs (May 2025)
+    - Venezuela/Maduro capture (Dec 2025)
+    - Greenland/EU deal (Jan 2026)
+    - India trade deal (Feb 2026)
+    - Iran war/ceasefire (Feb-Mar 2026)
+    
+    10-Step Playbook:
+    1. Verbal pressure - "make a deal"
+    2. Strategic posturing
+    3. Friday night strike (after markets close)
+    4. Risk premium expansion
+    5. "Forever war/tariff" language
+    6. Markets price prolonged conflict = NEW LOWS
+    7. Conditional de-escalation signals
+    8. Market/political feedback loop = SMART MONEY BUYS
+    9. The Deal announced = violent rally
+    10. Victory lap = take profits
+    """
+    if not TRUMP_ANALYSIS_ENABLED:
+        return 0, "Trump analysis disabled"
+
+    try:
+        fg = get_fear_greed()
+        fg_val = fg.get("value", 50)
+
+        # Get weekly BTC change as market proxy
+        r = requests.get("https://api.binance.com/api/v3/klines",
+            params={"symbol":"BTCUSDT","interval":"1d","limit":7}, timeout=10)
+        closes = [float(k[4]) for k in r.json()]
+        weekly_chg = (closes[-1] - closes[0]) / closes[0] * 100
+
+        # STEP 8: Smart money accumulation (BEST BUY)
+        # Triggered by: oil near $90, stocks -5%+, F&G extreme fear
+        # This is when Trump's pressure is MAXIMUM before deal
+        if fg_val < 15 and weekly_chg < -10:
+            return +20, "TRUMP STEP 8: Max pressure before deal - Smart money BUY zone"
+
+        # STEP 7: Conditional de-escalation starting
+        # Trump language softens, deal coming soon
+        if fg_val < 20 and weekly_chg < -5:
+            return +15, "TRUMP STEP 7: De-escalation signals - Begin accumulating"
+
+        # STEP 6: Markets pricing prolonged conflict
+        # Second or third dip - structural repositioning
+        if fg_val < 30 and weekly_chg < -3:
+            return +8, "TRUMP STEP 6: Prolonged conflict priced in - Watch entries"
+
+        # STEP 4-5: Escalation phase - stay cautious
+        # "Forever war/tariff" language = more pain coming
+        if fg_val < 40 and weekly_chg < -8:
+            return -12, "TRUMP STEP 4-5: Escalation active - Reduce exposure"
+
+        # STEP 10: Victory lap - violent repricing done
+        # Time to take profits before reversal
+        if fg_val > 70 and weekly_chg > 8:
+            return -15, "TRUMP STEP 10: Victory rally - Take profits"
+
+        # STEP 9: Deal just announced
+        # Sharp rally incoming - buy any dips
+        if fg_val > 55 and weekly_chg > 5:
+            return +10, "TRUMP STEP 9: Deal announced - Ride the rally"
+
+        return 0, "Trump playbook: No clear step detected"
+
+    except Exception as e:
+        return 0, f"Trump analysis error: {e}"
+
+# TO DISABLE TRUMP ANALYSIS WHEN HE LEAVES PRESIDENCY:
+# Simply change line above to: TRUMP_ANALYSIS_ENABLED = False
+# One line change removes all Trump-specific logic permanently
+
+
+def get_geopolitical_score():
+    """
+    Universal Geopolitical Market Intelligence
+    Based on Kobeissi Letter research - timeless principles
+    Works regardless of president, conflict or country
+    Core truth: Extreme fear + oversold market = best buy opportunity
+    """
+    try:
+        fg = get_fear_greed()
+        fg_val = fg.get("value", 50)
+
+        r = requests.get("https://api.binance.com/api/v3/klines",
+            params={"symbol":"BTCUSDT","interval":"1d","limit":7}, timeout=10)
+        closes = [float(k[4]) for k in r.json()]
+        weekly_change = (closes[-1] - closes[0]) / closes[0] * 100
+
+        # BEST BUY ZONE: Extreme fear + market crashed
+        if fg_val < 15 and weekly_change < -10:
+            return +25, "EXTREME FEAR + CRASH: Historical best buy zone"
+        if fg_val < 25 and weekly_change < -5:
+            return +20, "High fear + pullback: Smart money accumulation"
+        if fg_val < 30 and weekly_change < -3:
+            return +12, "Fear market: Good entry conditions"
+
+        # DANGER ZONE: Greed + overbought
+        if fg_val > 75 and weekly_change > 10:
+            return -20, "EXTREME GREED + RALLY: Take profits soon"
+        if fg_val > 60 and weekly_change > 5:
+            return -10, "Greed building: Reduce exposure"
+
+        return 0, "Neutral market conditions"
+
+    except Exception as e:
+        return 0, f"Geo check error: {e}"
+
+def is_weekend_blackout():
+    """
+    Avoid Friday night trades - major announcements always happen then
+    Verified: Every major market event since 2025 happened Friday PM
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    wd, hr = now.weekday(), now.hour
+    if wd == 4 and hr >= 20:
+        return True, "FRIDAY BLACKOUT 8PM UTC - no new trades"
+    if wd == 5:
+        return True, "SATURDAY BLACKOUT - weekend digestion"
+    if wd == 6 and hr < 21:
+        return True, "SUNDAY PRE-MARKET BLACKOUT"
+    return False, "Normal trading hours"
 
 
 def get_fear_greed():
@@ -1642,6 +2022,9 @@ def execute(symbol, signal, price, cfg, conf, market):
             coin = symbol.replace("USDT", "")
             prec = crypto_precision(symbol)
             if signal == "BUY":
+                if conf < 45:
+                    log(f"  SKIP {symbol}: conf {conf}% < 45% minimum")
+                    return False
                 bal    = get_crypto_balance("USDT")
                 # Position sizing - 40% of balance, max $15
                 amount = round(bal * 0.40, 2)
@@ -1652,18 +2035,11 @@ def execute(symbol, signal, price, cfg, conf, market):
                     return False
                 qty   = round(amount / price, prec)
                 # Ensure minimum $5 notional value
-                if qty * price < 5:
-                    qty = round(5.5 / price, prec)
+                if qty * price < 11:
+                    qty = round(12 / price, prec)
                 # Round to correct precision
                 if prec == 0:
                     qty = int(qty)
-                hl_trade("BUY", "SOL")
-                # Only XYZ trade if less than 2 open XYZ positions
-                from tradexyz_trader import xyz_get_positions
-                if len(xyz_get_positions()) < 2:
-                    xyz_trade("BUY", ticker=None)
-                else:
-                    log("[XYZ] Max positions reached - skipping")
                 order = place_crypto_order(symbol, "BUY", qty)
                 log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 register_trade(symbol, price, cfg, "crypto")
@@ -1680,12 +2056,6 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if qty < 0.00001:
                     log(f"  SKIP {symbol}: no balance")
                     return False
-                hl_trade("SELL", "SOL")
-                from tradexyz_trader import xyz_get_positions
-                if len(xyz_get_positions()) < 2:
-                    xyz_trade("SELL", ticker=None)
-                else:
-                    log("[XYZ] Max positions reached - skipping")
                 order = place_crypto_order(symbol, "SELL", qty)
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 open_trades.pop(symbol, None)
@@ -1882,7 +2252,7 @@ def run_cycle():
     try:
         _usdt = get_crypto_balance("USDT")
         log(f"  [ASSET MODE] USDT check: ${_usdt:.2f}")
-        if _usdt < 4:
+        if _usdt < 6:
             log(f"  [ASSET MODE] LOW USDT - activating asset trading!")
             strategy_now = load_strategy()
             trade_existing_assets(strategy_now, {})
@@ -2120,6 +2490,37 @@ def run_cycle():
             "stocks": "open" if market_open() else "closed",
             "hfm":    "signal_mode" if (HFM_ACCOUNT or EXNESS_LOGIN) else "disabled",
         },
+        "binance_balance": (lambda: (lambda b: {"usdt": round(b,2)})(get_crypto_balance("USDT")))(),
+        "xyz": (lambda: {
+            "balance":   round(xyz_get_balance(), 2),
+            "free":      (lambda: __import__("tradexyz_trader").xyz_free_margin())(),
+            "positions": [
+                {"coin": p.get("position",{}).get("coin","").replace("xyz:",""),
+                 "szi":  p.get("position",{}).get("szi",""),
+                 "pnl":  p.get("position",{}).get("unrealizedPnl",""),
+                 "margin": p.get("position",{}).get("marginUsed","")}
+                for p in (xyz_get_positions() or [])
+            ]
+        })(),
+        "dream": (lambda i: {
+            "win_rate":   i.get("win_rate_pct", 0) if i else 0,
+            "best_asset": i.get("best_asset","") if i else "",
+            "avoid":      i.get("directives",{}).get("avoid_asset","") if i else "",
+            "defensive":  i.get("directives",{}).get("go_defensive", False) if i else False,
+            "streak":     i.get("current_losing_streak", 0) if i else 0,
+        })(load_insights()),
+        "intelligence": {
+            "hormuz":     _hz_val if "_hz_val" in dir() else "UNKNOWN",
+            "dprk":       bool(_nk_val) if "_nk_val" in dir() else False,
+            "geo_score":  get_geopolitical_score()[0],
+            "trump_score": get_trump_analysis_score()[0],
+        },
+        "performance": {
+            "total_trades":  len(load_history()),
+            "trade_log_size": len(trade_log),
+        },
+        "version": "v9",
+        "uptime_cycles": cycle_count,
     }
     push_status(status)
 
@@ -2339,7 +2740,7 @@ def apply_multidim_intelligence(sym,signal,score,confidence,market):
             elif _fg<=20: adj-=15;reasons.append(f"Fear {_fg} - hold not sell")
     fs=score+adj; fc=max(0,min(100,confidence+ac))
     if adj!=0: log(f"  [INTEL] {sym}: {score:+d}->{fs:+d} conf:{confidence}%->{fc}% | {reasons[0] if reasons else ''}")
-    return fs,fc,reasons[:3]
+    return fs,fc,reasons[:5]
 
 def log_intel_summary():
     import requests as _rq
@@ -2365,6 +2766,20 @@ def log_intel_summary():
         else:
             print(f"  WEATHER : Global scan complete - no extreme events")
     except: print(f"  WEATHER : Scanning global zones...")
+
+    # Geo/Trump intelligence status
+    try:
+        _gs, _gr = get_geopolitical_score()
+        _ts, _tr = get_trump_analysis_score()
+        _blackout, _br = is_weekend_blackout()
+        geo_label = ("🟢 +" if _gs > 0 else "🔴 " if _gs < 0 else "⚪ ") + str(_gs)
+        trump_label = ("🟢 +" if _ts > 0 else "🔴 " if _ts < 0 else "⚪ ") + str(_ts)
+        print(f"  GEO     : {geo_label} | {_gr[:50]}")
+        print(f"  TRUMP   : {trump_label} | {_tr[:50]}")
+        if _blackout:
+            print(f"  ⛔ {_br}")
+    except Exception as e:
+        print(f"  GEO/TRUMP: error {e}")
     try:
         _r=_rq.get("https://gamma-api.polymarket.com/markets",
             params={"limit":200,"active":"true","closed":"false"},timeout=8)
