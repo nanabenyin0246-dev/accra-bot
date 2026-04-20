@@ -38,6 +38,15 @@ try:
 except Exception as _xyz_err:
     XYZ_ENABLED = False
 
+
+# Stub xyz functions - always defined, overridden if import succeeds
+def xyz_get_balance(): return 0.0
+def xyz_free_margin(): return 0.0
+def xyz_get_price(s): return 0.0
+def xyz_leverage_for(s): return 1
+def xyz_min_margin(s): return 999
+def _get_xyz_meta(s): return None
+STOCKS = []; COMMODITIES = []; FOREX = []; INDICES = []
 def xyz_score_asset(ticker, prices, closes_cache):
     """Score a trade.xyz asset using technicals. Returns (score, signal)."""
     import statistics
@@ -535,7 +544,7 @@ def build_ai_providers():
     if CEREBRAS_KEY:
         AI_PROVIDERS.append({"name":"cerebras","url":"https://api.cerebras.ai/v1/chat/completions",
             "model":"llama-4-scout-17b-16e-instruct","headers":{"Authorization":f"Bearer {CEREBRAS_KEY}","Content-Type":"application/json"},"max_tokens":300})
-    if DEEPSEEK_KEY:
+    if DEEPSEEK_KEY and False:  # disabled - insufficient balance
         AI_PROVIDERS.append({"name":"deepseek","url":"https://api.deepseek.com/chat/completions",
             "model":"deepseek-chat","headers":{"Authorization":f"Bearer {DEEPSEEK_KEY}","Content-Type":"application/json"},"max_tokens":300})
     log(f"  AI Providers: {[p['name'] for p in AI_PROVIDERS]}")
@@ -688,7 +697,7 @@ def get_top_crypto(n=20):
     try:
         r = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=10)
         r.raise_for_status()
-        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT", "DUSDT", "ZECUSDT", "NIGHTUSDT", "ESPUSDT", "NOMUSDT", "KITEUSDT", "REDUSDT", "GIGGLEUSDT", "JOEUSDT", "DASHUSDT", "0GUSDT", "ENJUSDT", "MMTUSDT", "KATUSDT", "TRUMPUSDT"}
+        skip = {"USDTUSDT", "BUSDUSDT", "TUSDUSDT", "USDCUSDT", "FDUSDUSDT", "USD1USDT", "RLUSDUSDT", "UUSDT", "USDPUSDT", "DAIUSDT", "FRAXUSDT", "PAXGUSDT", "DUSDT", "ZECUSDT", "NIGHTUSDT", "ESPUSDT", "NOMUSDT", "KITEUSDT", "REDUSDT", "GIGGLEUSDT", "JOEUSDT", "DASHUSDT", "0GUSDT", "ENJUSDT", "MMTUSDT", "KATUSDT", "TRUMPUSDT", "PEPEUSDT", "BARDUSDT", "ROBOUSDT", "DEGOUSDT"}
         pairs = [t for t in r.json()
                  if t["symbol"].endswith("USDT")
                  and t["symbol"] not in skip
@@ -761,6 +770,11 @@ def get_crypto_balance(asset):
 
 
 def place_crypto_order(symbol, side, quantity):
+    import math
+    prec = crypto_precision(symbol)
+    quantity = math.floor(quantity * 10**prec) / 10**prec
+    if quantity <= 0:
+        raise Exception(f'Quantity rounds to 0 for {symbol}')
     ts = binance_time()
     params = {"symbol": symbol, "side": side, "type": "MARKET",
               "quantity": quantity, "timestamp": ts}
@@ -773,7 +787,7 @@ def place_crypto_order(symbol, side, quantity):
 
 def crypto_precision(symbol):
     known = {"BTCUSDT": 5, "ETHUSDT": 4, "SOLUSDT": 2, "BNBUSDT": 3, "LINKUSDT": 1, "AVAXUSDT": 1, "LTCUSDT": 2, "UNIUSDT": 2, "FETUSDT": 1, "WLDUSDT": 1, "ADAUSDT": 0, "DOGEUSDT": 0, "XRPUSDT": 0, "NEARUSDT": 0,
-             "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2}
+             "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2, "SIGNUSDT": 0, "ORDIUSDT": 2, "BOMEUSDT": 0, "TAOUSDT": 3, "ZROUSDT": 2, "TRXUSDT": 0, "PEPEUSDT": 0}
     return known.get(symbol, 2)
 
 
