@@ -33,7 +33,7 @@ def hl_trade(signal, coin="SOL", pct=0.2):
 
 # ── TRADE.XYZ ────────────────────────────────────────────
 try:
-    from tradexyz_trader import xyz_place_order, xyz_get_balance, xyz_get_positions, xyz_close_position, xyz_get_price, xyz_get_all_prices
+    pass  # xyz disabled - resumes when Binance hits $100
     XYZ_ENABLED = True
 except Exception as _xyz_err:
     XYZ_ENABLED = False
@@ -2025,8 +2025,8 @@ def execute(symbol, signal, price, cfg, conf, market):
             coin = symbol.replace("USDT", "")
             prec = crypto_precision(symbol)
             if signal == "BUY":
-                if conf < 45:
-                    log(f"  SKIP {symbol}: conf {conf}% < 45% minimum")
+                if conf < 25:
+                    log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
                     return False
                 bal    = get_crypto_balance("USDT")
                 # Position sizing - 40% of balance, max $15
@@ -2062,6 +2062,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                 order = place_crypto_order(symbol, "SELL", qty)
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 open_trades.pop(symbol, None)
+                log(f"  [PROFIT->USDT] Proceeds in USDT - P&L trackable")
                 telegram(f"<b>CRYPTO SELL</b>\n{symbol} @ ${price:,.4f}\nQty:{qty}")
                 return True
 
