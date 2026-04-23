@@ -1041,7 +1041,7 @@ def trade_existing_assets(strategy, cfg):
         scored.sort(key=lambda x: x["score"], reverse=True)
         best = scored[0]
         worst = scored[-1]
-        if best["symbol"] != worst["symbol"] and best["score"] > 40 and worst["score"] < 0:
+        if best["symbol"] != worst["symbol"] and best["score"] > 40 and worst["score"] < 25:
             log(f"  [ASSET TRADE] ROTATION: Sell {worst['symbol']} ({worst['score']}) -> Buy {best['symbol']} ({best['score']})")
             prec = crypto_precision(worst["symbol"])
             sell_qty = int(worst["qty"] * 0.95) if prec == 0 else round(worst["qty"] * 0.95, prec)
