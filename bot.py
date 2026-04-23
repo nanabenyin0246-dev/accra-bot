@@ -996,22 +996,11 @@ confidence: 0-100"""
 
 
 def trade_existing_assets(strategy, cfg):
-    """
-    When USDT is empty, trade existing assets for profit.
-    - If asset score is SELL → sell it back to USDT
-    - If asset was sold and price dips → rebuy it cheaper
-    This keeps the bot active even with zero USDT.
-    """
     try:
         usdt_bal = get_crypto_balance("USDT")
         if usdt_bal > 4:
-            return  # Have enough USDT, normal trading handles it
-
+            return
         log(f"  [ASSET TRADE] USDT low (${usdt_bal:.2f}) - scanning existing assets...")
-
-        # Get all non-USDT balances
-        from urllib.parse import urlencode
-        import hmac, hashlib
         ts = binance_time()
         from urllib.parse import urlencode
         q = urlencode({"timestamp": ts})
@@ -1019,12 +1008,10 @@ def trade_existing_assets(strategy, cfg):
         r = requests.get(
             f"https://api.binance.com/api/v3/account?{q}&signature={sig}",
             headers={"X-MBX-APIKEY": BINANCE_KEY}, timeout=10)
-
         if not r.ok:
             return
-
-        tradeable = []
         skip = {"USDT","BNB","BUSD","TUSD","USDC","FDUSD"}
+        scored = []
         for b in r.json()["balances"]:
             asset = b["asset"]
             free = float(b["free"])
@@ -1034,79 +1021,74 @@ def trade_existing_assets(strategy, cfg):
             try:
                 price = get_crypto_price(symbol)
                 value = free * price
-                if value >= 2:  # Only consider assets worth $2+
-                    tradeable.append({
-                        "asset": asset,
-                        "symbol": symbol,
-                        "qty": free,
-                        "price": price,
-                        "value": value
-                    })
-            except:
-                continue
-
-        if not tradeable:
-            log("  [ASSET TRADE] No tradeable assets found")
-            return
-
-        log(f"  [ASSET TRADE] Found {len(tradeable)} tradeable assets")
-
-        for t in tradeable:
-            sym = t["symbol"]
-            try:
-                closes = get_crypto_closes(sym, 50)
+                if value < 2:
+                    continue
+                closes = get_crypto_closes(symbol, 50)
                 if len(closes) < 20:
                     continue
-
-                score, reasons = technical_score(closes)
+                score, _ = technical_score(closes)
                 fg = get_fear_greed()
-                fg_score = 0
-                if fg["value"] < 30: fg_score = 15
-                elif fg["value"] > 70: fg_score = -15
+                fg_score = 15 if fg["value"] < 30 else (-15 if fg["value"] > 70 else 0)
                 final_score = score + fg_score
-
-                log(f"  [ASSET TRADE] {sym} Score:{final_score} Value:${t['value']:.2f}")
-
-                # Smart asset cycling - sell weakest to buy strongest
-                # Sell if: score < 0 OR asset is in profit > 3%
-                in_trade = sym in open_trades
+                scored.append({"asset": asset, "symbol": symbol, "qty": free, "price": price, "value": value, "score": final_score})
+                log(f"  [ASSET TRADE] {symbol} Score:{final_score} Value:${value:.2f}")
+            except:
+                continue
+        if not scored:
+            log("  [ASSET TRADE] No tradeable assets found")
+            return
+        log(f"  [ASSET TRADE] Found {len(scored)} tradeable assets")
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        best = scored[0]
+        worst = scored[-1]
+        if best["symbol"] != worst["symbol"] and best["score"] > 40 and worst["score"] < 0:
+            log(f"  [ASSET TRADE] ROTATION: Sell {worst['symbol']} ({worst['score']}) -> Buy {best['symbol']} ({best['score']})")
+            prec = crypto_precision(worst["symbol"])
+            sell_qty = int(worst["qty"] * 0.95) if prec == 0 else round(worst["qty"] * 0.95, prec)
+            if sell_qty * worst["price"] >= 2:
+                try:
+                    order = place_crypto_order(worst["symbol"], "SELL", sell_qty)
+                    proceeds = float(order.get("cummulativeQuoteQty", 0))
+                    log(f"  [ASSET TRADE] SOLD {worst['asset']} -> ${proceeds:.2f} USDT")
+                    time.sleep(1)
+                    if proceeds >= 2:
+                        buy_amount = round(proceeds * 0.95, 2)
+                        buy_qty = round(buy_amount / best["price"], crypto_precision(best["symbol"]))
+                        if crypto_precision(best["symbol"]) == 0:
+                            buy_qty = int(buy_qty)
+                        if buy_qty * best["price"] >= 2:
+                            buy_order = place_crypto_order(best["symbol"], "BUY", buy_qty)
+                            log(f"  [ASSET TRADE] BOUGHT {buy_qty} {best['asset']} @ ${best['price']:.4f}")
+                            telegram(f"<b>ASSET ROTATION</b>\nSOLD {worst['asset']} (score:{worst['score']})\nBOUGHT {best['asset']} (score:{best['score']})\nAmount: ${proceeds:.2f}")
+                            return
+                except Exception as e:
+                    log(f"  [ASSET TRADE] Rotation error: {e}", "warning")
+        for t in scored:
+            sym = t["symbol"]
+            try:
                 entry_price = open_trades.get(sym, {}).get("entry", t["price"])
                 profit_pct = (t["price"] - entry_price) / entry_price * 100 if entry_price else 0
-
                 should_sell = False
                 sell_reason = ""
-
-                if final_score < -10 and not in_trade:
+                if t["score"] < -15:
                     should_sell = True
-                    sell_reason = f"Bearish score {final_score}"
-                elif profit_pct > 3 and not in_trade:
+                    sell_reason = f"Bearish score {t['score']}"
+                elif profit_pct > 3:
                     should_sell = True
                     sell_reason = f"Taking profit +{profit_pct:.1f}%"
-                elif profit_pct < -5 and not in_trade:
+                elif profit_pct < -5:
                     should_sell = True
                     sell_reason = f"Stop loss -{abs(profit_pct):.1f}%"
-
                 if should_sell:
                     prec = crypto_precision(sym)
                     qty = int(t["qty"] * 0.95) if prec == 0 else round(t["qty"] * 0.95, prec)
                     if qty * t["price"] >= 2:
-                        try:
-                            order = place_crypto_order(sym, "SELL", qty)
-                            proceeds = float(order.get("cummulativeQuoteQty", 0))
-                            log(f"  [ASSET TRADE] SOLD {qty} {t['asset']} → ${proceeds:.2f} USDT | {sell_reason}")
-                            telegram(
-                                f"<b>ASSET TRADE</b>\n"
-                                f"SOLD {t['asset']} → ${proceeds:.2f} USDT\n"
-                                f"Reason: {sell_reason}\n"
-                                f"Bot will reinvest in stronger coin!"
-                            )
-                        except Exception as e:
-                            log(f"  [ASSET TRADE] Sell error {sym}: {e}", "warning")
-
+                        order = place_crypto_order(sym, "SELL", qty)
+                        proceeds = float(order.get("cummulativeQuoteQty", 0))
+                        log(f"  [ASSET TRADE] SOLD {qty} {t['asset']} -> ${proceeds:.2f} USDT | {sell_reason}")
+                        telegram(f"<b>ASSET SELL</b>\nSOLD {t['asset']} -> ${proceeds:.2f} USDT\nReason: {sell_reason}")
             except Exception as e:
                 log(f"  [ASSET TRADE] Error {sym}: {e}", "warning")
-                continue
-
     except Exception as e:
         log(f"  [ASSET TRADE] Main error: {e}", "warning")
 
