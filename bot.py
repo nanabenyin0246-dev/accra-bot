@@ -998,7 +998,7 @@ confidence: 0-100"""
 def trade_existing_assets(strategy, cfg):
     try:
         usdt_bal = get_crypto_balance("USDT")
-        if usdt_bal > 4:
+        if usdt_bal > 10:
             return
         log(f"  [ASSET TRADE] USDT low (${usdt_bal:.2f}) - scanning existing assets...")
         ts = binance_time()
