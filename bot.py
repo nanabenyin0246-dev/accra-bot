@@ -790,6 +790,7 @@ def place_crypto_order(symbol, side, quantity):
         quantity = min(quantity, max_qty)
     prec = crypto_precision(symbol)
     quantity = math.floor(quantity * 10**prec) / 10**prec
+    if prec == 0: quantity = int(quantity)
     if quantity <= 0:
         raise Exception(f'Quantity rounds to 0 for {symbol}')
     ts = binance_time()
