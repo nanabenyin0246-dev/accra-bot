@@ -1022,7 +1022,7 @@ def trade_existing_assets(strategy, cfg):
             try:
                 price = get_crypto_price(symbol)
                 value = free * price
-                if value < 2:
+                if value < 5.5:
                     continue
                 closes = get_crypto_closes(symbol, 50)
                 if len(closes) < 20:
