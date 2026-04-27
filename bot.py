@@ -805,7 +805,7 @@ def place_crypto_order(symbol, side, quantity):
 
 def crypto_precision(symbol):
     known = {"BTCUSDT": 5, "ETHUSDT": 4, "SOLUSDT": 2, "BNBUSDT": 3, "LINKUSDT": 1, "AVAXUSDT": 1, "LTCUSDT": 2, "UNIUSDT": 2, "FETUSDT": 1, "WLDUSDT": 1, "ADAUSDT": 0, "DOGEUSDT": 0, "XRPUSDT": 0, "NEARUSDT": 0,
-             "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2, "SIGNUSDT": 0, "AAVEUSDT": 2, "BIOUSDT": 0, "ENAUSDT": 0, "CHZUSDT": 0, "PORTALUSDT": 2, "STRKUSDT": 0, "ORDIUSDT": 2, "BOMEUSDT": 0, "TAOUSDT": 2, "ZROUSDT": 2, "TRXUSDT": 0, "PEPEUSDT": 0}
+             "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2, "SIGNUSDT": 0, "AAVEUSDT": 2, "BIOUSDT": 0, "ENAUSDT": 0, "CHZUSDT": 0, "PORTALUSDT": 2, "STRKUSDT": 0, "ORDIUSDT": 2, "BOMEUSDT": 0, "TAOUSDT": 2, "ZROUSDT": 2, "TRXUSDT": 0, "PEPEUSDT": 0, "PENGUUSDT": 0}
     return known.get(symbol, 2)
 
 
