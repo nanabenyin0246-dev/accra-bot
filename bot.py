@@ -533,7 +533,7 @@ AI_ROTATE_EVERY = 3
 def build_ai_providers():
     global AI_PROVIDERS
     AI_PROVIDERS = []
-    if GROQ_KEY:
+    if GROQ_KEY and False:  # disabled - account restricted
         AI_PROVIDERS.append({"name":"groq","url":"https://api.groq.com/openai/v1/chat/completions",
             "model":"llama-3.3-70b-versatile","headers":{"Authorization":f"Bearer {GROQ_KEY}","Content-Type":"application/json"},"max_tokens":300})
     if GEMINI_KEY:
@@ -802,6 +802,21 @@ def place_crypto_order(symbol, side, quantity):
     r.raise_for_status()
     return r.json()
 
+
+def get_binance_lot_size(symbol):
+    """Fetch real lot size stepSize from Binance exchange info."""
+    try:
+        r = requests.get(f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
+        filters = r.json()["symbols"][0]["filters"]
+        for f in filters:
+            if f["filterType"] == "LOT_SIZE":
+                step = float(f["stepSize"])
+                if step >= 1: return 0
+                s = f["stepSize"].rstrip("0")
+                return len(s.split(".")[-1]) if "." in s else 0
+    except:
+        pass
+    return 2
 
 def crypto_precision(symbol):
     known = {"BTCUSDT": 5, "ETHUSDT": 4, "SOLUSDT": 2, "BNBUSDT": 3, "LINKUSDT": 1, "AVAXUSDT": 1, "LTCUSDT": 2, "UNIUSDT": 2, "FETUSDT": 1, "WLDUSDT": 1, "ADAUSDT": 0, "DOGEUSDT": 0, "XRPUSDT": 0, "NEARUSDT": 0,
