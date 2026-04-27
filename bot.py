@@ -2432,10 +2432,18 @@ def run_cycle():
     min_conf = strategy.get("min_confidence", 35)
     max_open = strategy.get("max_open_trades", 5)
 
-    buys = [
-        (s, r) for s, r in all_results.items()
-        if r["signal"] == "BUY" and r["confidence"] >= min_conf and s not in open_trades
-    ]
+    buys = []
+    for s, r in all_results.items():
+        if r["signal"] != "BUY": continue
+        if r["confidence"] < min_conf: continue
+        if s in open_trades: continue
+        tier, tier_reason = classify_signal_tier(r.get("combined", 0), r.get("reasons", []), s)
+        if tier == "ROUTINE":
+            log(f"  SKIP {s}: {tier_reason}")
+            continue
+        r["tier"] = tier
+        r["tier_reason"] = tier_reason
+        buys.append((s, r))
     buys.sort(key=lambda x: x[1]["combined"], reverse=True)
 
     sells = [
