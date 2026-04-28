@@ -2077,6 +2077,10 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if amount < 2:
                     log(f"  SKIP {symbol}: ${amount:.2f} < $2")
                     return False
+                min_notional = get_min_notional(symbol)
+                if amount < min_notional:
+                    log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional ${min_notional:.2f}")
+                    return False
                 qty   = round(amount / price, prec)
                 # Ensure minimum $5 notional value
                 if qty * price < 11:
