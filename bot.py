@@ -804,7 +804,7 @@ def place_crypto_order(symbol, side, quantity):
 
 
 def get_binance_lot_size(symbol):
-    """Fetch real lot size stepSize from Binance exchange info."""
+    """Fetch real lot size stepSize and min notional from Binance exchange info."""
     try:
         r = requests.get(f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
         filters = r.json()["symbols"][0]["filters"]
@@ -817,6 +817,18 @@ def get_binance_lot_size(symbol):
     except:
         pass
     return 2
+
+def get_min_notional(symbol):
+    """Fetch minimum notional value for a symbol from Binance."""
+    try:
+        r = requests.get(f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
+        filters = r.json()["symbols"][0]["filters"]
+        for f in filters:
+            if f["filterType"] in ("NOTIONAL", "MIN_NOTIONAL"):
+                return float(f.get("minNotional", 5.0))
+    except:
+        pass
+    return 5.0
 
 def crypto_precision(symbol):
     known = {"BTCUSDT": 5, "ETHUSDT": 4, "SOLUSDT": 2, "BNBUSDT": 3, "LINKUSDT": 1, "AVAXUSDT": 1, "LTCUSDT": 2, "UNIUSDT": 2, "FETUSDT": 1, "WLDUSDT": 1, "ADAUSDT": 0, "DOGEUSDT": 0, "XRPUSDT": 0, "NEARUSDT": 0,
@@ -2087,6 +2099,10 @@ def execute(symbol, signal, price, cfg, conf, market):
                 qty = int(qty) if prec == 0 else qty  # Round to int for DOGE/XRP etc
                 if qty < 0.00001:
                     log(f"  SKIP {symbol}: no balance")
+                    return False
+                min_notional = get_min_notional(symbol)
+                if qty * price < min_notional:
+                    log(f"  SKIP {symbol}: notional ${qty*price:.2f} < min ${min_notional:.2f}")
                     return False
                 order = place_crypto_order(symbol, "SELL", qty)
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
