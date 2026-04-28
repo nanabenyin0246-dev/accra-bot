@@ -1,0 +1,18 @@
+{
+  "mode": "balanced",
+  "min_confidence": 55,
+  "max_open_trades": 2,
+  "crypto_enabled": true,
+  "stocks_enabled": false,
+  "hfm_enabled": false,
+  "top_n_crypto": 20,
+  "top_n_stocks": 0,
+  "sl_multiplier": 1.0,
+  "tp_multiplier": 1.5,
+  "avoid_assets": [
+    "STOUSDT","SOLVUSDT","BIFIUSDT","NIGHTUSDT","DUSDT","UUSDT","BARDUSDT","MMTUSDT","HOLOUSDT","PEPEUSDT","DEGOUSDT","ROBOUSDT"
+  ],
+  "prefer_assets": [],
+  "market_condition": "neutral",
+  "updated_by": "manual"
+}
