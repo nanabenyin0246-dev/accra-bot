@@ -1060,7 +1060,7 @@ def trade_existing_assets(strategy, cfg):
         if best["symbol"] != worst["symbol"] and best["score"] > 40 and worst["score"] < 25:
             log(f"  [ASSET TRADE] ROTATION: Sell {worst['symbol']} ({worst['score']}) -> Buy {best['symbol']} ({best['score']})")
             prec = crypto_precision(worst["symbol"])
-            sell_qty = int(worst["qty"] * 0.95)
+            sell_qty = round(worst["qty"] * 0.95, get_binance_lot_size(worst["symbol"]))
             if sell_qty * worst["price"] >= 2:
                 try:
                     order = place_crypto_order(worst["symbol"], "SELL", sell_qty)
@@ -1096,8 +1096,8 @@ def trade_existing_assets(strategy, cfg):
                     should_sell = True
                     sell_reason = f"Stop loss -{abs(profit_pct):.1f}%"
                 if should_sell:
-                    prec = crypto_precision(sym)
-                    qty = int(t["qty"] * 0.95)
+                    prec = get_binance_lot_size(sym)
+                    qty = round(t["qty"] * 0.95, prec)
                     if qty * t["price"] >= 2:
                         order = place_crypto_order(sym, "SELL", qty)
                         proceeds = float(order.get("cummulativeQuoteQty", 0))
