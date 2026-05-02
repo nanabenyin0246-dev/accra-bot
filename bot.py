@@ -2070,10 +2070,29 @@ def execute(symbol, signal, price, cfg, conf, market):
                     log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
                     return False
                 bal    = get_crypto_balance("USDT")
-                # Position sizing - 40% of balance, max $15
-                amount = round(bal * 0.40, 2)
-                amount = min(amount, 15)  # Never more than $15
-                amount = min(amount, 12)  # Cap max trade at $12
+                # QUANT ENGINE: Kelly+Bayes+EV sizing
+                from quant_engine import trade_decision as _qd
+                _sl = cfg.get("sl", 0.025)
+                _tp = cfg.get("tp", 0.07)
+                _tp_ratio = _tp / _sl  # e.g. 7%/2.5% = 2.8x
+                _decision = _qd(
+                    signal_confidence=conf,
+                    signal_direction="BUY",
+                    free_usdt=bal,
+                    fear_greed=_fg_cache.get("value", 50),
+                    market_condition=strategy.get("market_condition", "neutral"),
+                    current_balance=bal,
+                    starting_balance=70.0,
+                    consecutive_losses=0,
+                    sl_multiplier=1.0,
+                    tp_multiplier=_tp_ratio,
+                    min_confidence=strategy.get("min_confidence", 55)
+                )
+                if not _decision["trade"]:
+                    log(f"  SKIP {symbol}: Quant blocked — {_decision['reason']}")
+                    return False
+                amount = _decision["position_size"]
+                log(f"  [QUANT] adj={_decision['adjusted_confidence']:.1f}% EV={_decision.get('ev',0):.3f}% size=${amount}")
                 if amount < 2:
                     log(f"  SKIP {symbol}: ${amount:.2f} < $2")
                     return False
