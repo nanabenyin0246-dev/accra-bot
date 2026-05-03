@@ -1795,19 +1795,10 @@ def get_geopolitical_score():
 
 def is_weekend_blackout():
     """
-    Avoid Friday night trades - major announcements always happen then
-    Verified: Every major market event since 2025 happened Friday PM
+    Crypto trades 24/7 - no blackout for crypto.
+    Stocks still respect Friday PM / weekend hours.
     """
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
-    wd, hr = now.weekday(), now.hour
-    if wd == 4 and hr >= 20:
-        return True, "FRIDAY BLACKOUT 8PM UTC - no new trades"
-    if wd == 5:
-        return True, "SATURDAY BLACKOUT - weekend digestion"
-    if wd == 6 and hr < 21:
-        return True, "SUNDAY PRE-MARKET BLACKOUT"
-    return False, "Normal trading hours"
+    return False, "Crypto trades 24/7"
 
 
 def get_fear_greed():
