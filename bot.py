@@ -2071,7 +2071,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                     signal_direction="BUY",
                     free_usdt=bal,
                     fear_greed=_fg_cache.get("value", 50),
-                    market_condition=strategy.get("market_condition", "neutral"),
+                    market_condition=cfg.get("market_condition", "neutral"),
                     current_balance=bal,
                     starting_balance=70.0,
                     consecutive_losses=0,
