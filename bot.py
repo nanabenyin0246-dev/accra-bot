@@ -514,6 +514,7 @@ HFM_INSTRUMENTS = {
 
 trade_log = []
 open_trades = {}
+_reentry_block = {}  # symbol -> {sl_price, timestamp}
 _fg_cache = {"value": 50, "label": "Neutral", "ts": 0}
 _news_cache = {}
 _fund_cache = {}
@@ -2060,6 +2061,15 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if conf < 25:
                     log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
                     return False
+                # RE-ENTRY FILTER: Don't re-buy within 3% of last SL price (Lo & Remorov)
+                sl_memory = _reentry_block.get(symbol)
+                if sl_memory:
+                    blocked_until_price = sl_memory["sl_price"] * 1.03
+                    if price < blocked_until_price:
+                        log(f"  SKIP {symbol}: re-entry blocked until ${blocked_until_price:.4f} (currently ${price:.4f})")
+                        return False
+                    else:
+                        _reentry_block.pop(symbol, None)
                 bal    = get_crypto_balance("USDT")
                 # QUANT ENGINE: Kelly+Bayes+EV sizing
                 from quant_engine import trade_decision as _qd
