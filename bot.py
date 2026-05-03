@@ -496,9 +496,9 @@ DEFAULT_STRATEGY = {
 }
 
 RISK_PROFILES = {
-    "aggressive":   {"sl": 0.035, "tp": 0.10, "trail": 0.025},
-    "balanced":     {"sl": 0.025, "tp": 0.07, "trail": 0.018},
-    "conservative": {"sl": 0.018, "tp": 0.05, "trail": 0.012},
+    "aggressive":   {"sl": 0.10, "tp": 0.15, "trail": 0.05},
+    "balanced":     {"sl": 0.10, "tp": 0.10, "trail": 0.03},
+    "conservative": {"sl": 0.10, "tp": 0.07, "trail": 0.03},
 }
 
 HFM_INSTRUMENTS = {
@@ -2007,7 +2007,7 @@ def check_trades(prices):
             continue
         if p > t["trail_high"]:
             t["trail_high"] = p
-            t["trail_sl"]   = p * (1 - 0.02)
+            t["trail_sl"]   = p * (1 - cfg.get("trail", 0.03))
         reason = None
         if p <= t["sl"]:
             reason = f"Stop-loss {p:.4f}"
