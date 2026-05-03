@@ -9,6 +9,10 @@
   "top_n_stocks": 0,
   "sl_multiplier": 1.0,
   "tp_multiplier": 1.5,
+  "partial_tp_fraction": 0.75,
+  "stale_close_hours": 48,
+  "circuit_breaker_losses": 2,
+  "circuit_breaker_factor": 0.25,
   "avoid_assets": [
     "STOUSDT","SOLVUSDT","BIFIUSDT","NIGHTUSDT","DUSDT","UUSDT","BARDUSDT","MMTUSDT","HOLOUSDT","PEPEUSDT","DEGOUSDT","ROBOUSDT"
   ],
