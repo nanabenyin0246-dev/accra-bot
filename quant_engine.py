@@ -49,6 +49,12 @@ def trade_decision(signal_confidence, signal_direction, free_usdt, fear_greed=50
     final_size = round(max(min(kelly_size * skew, free_usdt * 0.40), 2.0), 2)
     return {"trade": True, "position_size": final_size, "adjusted_confidence": adj_conf, "ev": ev, "kelly_size": kelly_size, "skew": skew, "reason": f"adj_conf={adj_conf:.1f}% EV={ev:.3f}% size=${final_size}"}
 
+def trade_decision_with_kronos(signal_confidence, signal_direction, free_usdt, **kwargs):
+    from kronos_signal import apply_kronos_to_signal
+    k = apply_kronos_to_signal(signal_confidence, signal_direction)
+    print(f"  [KRONOS] {k['kronos_direction']} prob={k['kronos_prob']}% adj={k['kronos_adj']:+d} src={k['source']}")
+    return trade_decision(k["adjusted"], signal_direction, free_usdt, **kwargs)
+
 if __name__ == "__main__":
     d = trade_decision(65, "BUY", 22.0, fear_greed=33, market_condition="bear", current_balance=22.0)
     print(d)
