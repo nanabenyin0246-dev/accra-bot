@@ -2072,7 +2072,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                         _reentry_block.pop(symbol, None)
                 bal    = get_crypto_balance("USDT")
                 # QUANT ENGINE: Kelly+Bayes+EV sizing
-                from quant_engine import trade_decision as _qd
+                from quant_engine import trade_decision_with_kronos as _qd
                 _sl = cfg.get("sl", 0.025)
                 _tp = cfg.get("tp", 0.07)
                 _tp_ratio = _tp / _sl  # e.g. 7%/2.5% = 2.8x
