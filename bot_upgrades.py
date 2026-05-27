@@ -1,3 +1,5 @@
+import sys
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 """
 bot_upgrades.py — Accra Bot Enhancement Module
 Inspired by zostaff/ai-quant-researcher
@@ -253,7 +255,7 @@ def critic_agent(symbol: str, signal: str, score: int, confidence: int,
         # Clamp confidence adjustment
         result["confidence_adj"] = max(-20, min(10, int(result["confidence_adj"])))
 
-        status = "✅ APPROVED" if result["approved"] else "❌ REJECTED"
+        status = "[OK] APPROVED" if result["approved"] else "[ERR] REJECTED"
         print(f"  [CRITIC] {symbol} {status} | {result['verdict'][:60]}")
         if result["fatal_issues"]:
             for issue in result["fatal_issues"]:
@@ -647,11 +649,11 @@ def print_upgrade_status():
     print("\n" + "="*55)
     print("  ACCRA BOT UPGRADES (zostaff-inspired)")
     print("="*55)
-    print("  ✅ 1. KillSwitch      — loss limits + data staleness")
-    print("  ✅ 2. CriticAgent     — adversarial AI trade review")
-    print("  ✅ 3. RiskSizer       — Kelly + volatility sizing")
-    print("  ✅ 4. FeaturePipeline — leakage-proof indicators")
-    print("  ✅ 5. DeflatedSharpe  — multiple-testing gate")
+    print("  [OK] 1. KillSwitch      — loss limits + data staleness")
+    print("  [OK] 2. CriticAgent     — adversarial AI trade review")
+    print("  [OK] 3. RiskSizer       — Kelly + volatility sizing")
+    print("  [OK] 4. FeaturePipeline — leakage-proof indicators")
+    print("  [OK] 5. DeflatedSharpe  — multiple-testing gate")
     n = _load_attempt_count()
     sr0 = round(_expected_max_sharpe(n), 2)
     print(f"\n  Signal attempts tracked: {n}")

@@ -1,3 +1,5 @@
+import sys
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 """
 bot_phase2.py — Accra Bot Phase 2 Upgrades
 Four modules: Backtest, Metrics, NN Fine-tune, Mode Manager
@@ -28,7 +30,7 @@ class ModeManager:
         if self.is_paper: return False, "PAPER mode"
         return False, "BACKTEST mode"
     def tag(self):
-        return {"live":"🔴 LIVE","paper":"📄 PAPER","backtest":"📊 BACKTEST"}.get(self._mode,"?")
+        return {"live":"[LIVE] LIVE","paper":"📄 PAPER","backtest":"📊 BACKTEST"}.get(self._mode,"?")
     def status(self):
         return {"mode":self._mode,"tag":self.tag(),"can_execute":self.is_live,"real_money":self.is_live}
 
@@ -248,7 +250,7 @@ class MetricsDashboard:
         print(f"  Max drawdown:   {m['max_drawdown']:.2f}%")
         print(f"  Avg win:        {m['avg_win_pct']:+.2f}%  Avg loss: {m['avg_loss_pct']:+.2f}%")
         print(f"\n  Last 7 days: {m['week_trades']} trades, WR:{m['week_win_rate']}%, PnL:{m['week_pnl']:+.2f}%")
-        arrow="🟢" if m['streak_type']=="WIN" else "🔴"
+        arrow="🟢" if m['streak_type']=="WIN" else "[LIVE]"
         print(f"  {arrow} {m['streak']} consecutive {m['streak_type']}S")
         if m["per_asset"]:
             print(f"\n  Per asset (top 5):")
@@ -299,10 +301,10 @@ class NNFineTuner:
 
 def print_phase2_status():
     print(f"\n{'='*55}\n  ACCRA BOT PHASE 2 UPGRADES\n{'='*55}")
-    print(f"  ✅ Mode Manager    — {mode_manager.tag()}")
-    print(f"  ✅ Backtest Engine — BacktestEngine().run('BTCUSDT', days=30)")
-    print(f"  ✅ Metrics Dashboard — MetricsDashboard().print_report()")
-    print(f"  ✅ NN Fine-tuner   — auto-triggers every 50 real trades")
+    print(f"  [OK] Mode Manager    — {mode_manager.tag()}")
+    print(f"  [OK] Backtest Engine — BacktestEngine().run('BTCUSDT', days=30)")
+    print(f"  [OK] Metrics Dashboard — MetricsDashboard().print_report()")
+    print(f"  [OK] NN Fine-tuner   — auto-triggers every 50 real trades")
     print(f"{'='*55}\n")
 
 if __name__ == "__main__":
