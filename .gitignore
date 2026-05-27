@@ -1,6 +1,7 @@
-*.json
-*.bak*
+﻿__pycache__/
+*.pyc
+*.db
 *.log
-polymarket_paper.json
-polyalerthub_log.json
-trades.json
+.env
+fix_bot.py
+fix_encoding.py
