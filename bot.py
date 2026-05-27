@@ -1,4 +1,13 @@
-﻿import os, time, json, hmac, hashlib, requests, logging, re
+﻿# -- PHASE 2 --
+try:
+    from bot_phase2 import (mode_manager, BacktestEngine, MetricsDashboard, NNFineTuner, print_phase2_status)
+    PHASE2_ENABLED = True
+    print_phase2_status()
+except Exception as _p2_err:
+    PHASE2_ENABLED = False
+    print(f'[PHASE2] Not loaded: ' + str(_p2_err))
+
+import os, time, json, hmac, hashlib, requests, logging, re
 from datetime import datetime
 from urllib.parse import urlencode
 
@@ -3394,4 +3403,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
