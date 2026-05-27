@@ -2995,6 +2995,8 @@ def main():
         except Exception as e:
             log(f"[Cycle error] {e}", "error")
             telegram(f"<b>CYCLE ERROR</b>\n{e}")
+        if "418" in str(e):
+            log("  [BAN] 418 - sleeping 10 min", "error"); time.sleep(600)
         # ── Dream cycle ──────────────────────────────────
         global dream_counter
         dream_counter += 1
