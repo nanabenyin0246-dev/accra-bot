@@ -496,6 +496,154 @@ GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 LOG_FILE       = "trade_log.json"
+DB_FILE        = os.path.expanduser("~/accra-bot/trades.db")
+
+def init_db():
+    """Initialise SQLite trade journal. Safe to call multiple times."""
+    try:
+        import sqlite3
+        con = sqlite3.connect(DB_FILE)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS trades (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts            TEXT,
+                symbol        TEXT,
+                action        TEXT,
+                market        TEXT,
+                price         REAL,
+                quantity      REAL,
+                amount_usdt   REAL,
+                confidence    INTEGER,
+                combined      INTEGER,
+                tech          INTEGER,
+                fund          INTEGER,
+                rsi           REAL,
+                fear_greed    INTEGER,
+                btc_trend     REAL,
+                position_size REAL,
+                sl_price      REAL,
+                tp_price      REAL,
+                entry_reasons TEXT,
+                strategy      TEXT,
+                market_regime TEXT,
+                pnl_pct       REAL,
+                won           INTEGER,
+                closed_at     TEXT,
+                latency_ms    REAL
+            )
+        """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS metrics (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts         TEXT,
+                usdt_bal   REAL,
+                open_trades INTEGER,
+                win_rate   REAL,
+                profit_factor REAL,
+                expectancy REAL,
+                sharpe     REAL,
+                max_dd     REAL,
+                cycle      INTEGER
+            )
+        """)
+        con.commit()
+        con.close()
+        log("  [DB] SQLite trade journal ready")
+    except Exception as e:
+        log(f"  [DB] Init error: {e}", "warning")
+
+def db_log_trade(entry: dict):
+    """Write a trade to SQLite. Falls back to JSON on error."""
+    try:
+        import sqlite3, json as _j
+        con = sqlite3.connect(DB_FILE)
+        con.execute("""
+            INSERT INTO trades (
+                ts, symbol, action, market, price, quantity,
+                amount_usdt, confidence, combined, tech, fund,
+                rsi, fear_greed, btc_trend, position_size,
+                sl_price, tp_price, entry_reasons, strategy,
+                market_regime, pnl_pct, won, closed_at, latency_ms
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            entry.get("time", entry.get("ts", "")),
+            entry.get("symbol",""),
+            entry.get("action",""),
+            entry.get("market",""),
+            entry.get("price", 0),
+            entry.get("quantity", 0),
+            entry.get("amount_usdt", 0),
+            entry.get("confidence", 0),
+            entry.get("combined", 0),
+            entry.get("tech", 0),
+            entry.get("fund", 0),
+            entry.get("rsi", 0),
+            entry.get("fear_greed", 0),
+            entry.get("btc_trend", 0),
+            entry.get("position_size", 0),
+            entry.get("sl_price", 0),
+            entry.get("tp_price", 0),
+            _j.dumps(entry.get("reasons", [])),
+            entry.get("strategy",""),
+            entry.get("market_regime",""),
+            entry.get("pnl_pct", None),
+            1 if entry.get("won") else (0 if entry.get("won") is False else None),
+            entry.get("closed_at", None),
+            entry.get("latency_ms", None),
+        ))
+        con.commit()
+        con.close()
+    except Exception as e:
+        log(f"  [DB] Write error: {e} — falling back to JSON", "warning")
+        log_trade(entry)   # fallback
+
+def db_get_metrics() -> dict:
+    """Compute real performance metrics from SQLite."""
+    try:
+        import sqlite3
+        con = sqlite3.connect(DB_FILE)
+        rows = con.execute(
+            "SELECT pnl_pct, won FROM trades WHERE won IS NOT NULL"
+        ).fetchall()
+        con.close()
+        if len(rows) < 3:
+            return {}
+        pnls = [r[0] for r in rows if r[0] is not None]
+        wins = [r for r in rows if r[1] == 1]
+        losses = [r for r in rows if r[1] == 0]
+        win_rate = len(wins) / len(rows) if rows else 0
+        avg_win  = sum(r[0] for r in wins)  / len(wins)  if wins   else 0
+        avg_loss = sum(r[0] for r in losses)/ len(losses) if losses else 0
+        profit_factor = abs(avg_win * len(wins)) / abs(avg_loss * len(losses)) if losses and avg_loss != 0 else 999
+        expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
+        mean_pnl = sum(pnls) / len(pnls)
+        variance = sum((p - mean_pnl)**2 for p in pnls) / len(pnls)
+        import math as _math
+        std_pnl  = _math.sqrt(variance) if variance > 0 else 1
+        sharpe   = (mean_pnl / std_pnl) * _math.sqrt(252) if std_pnl > 0 else 0
+        cumulative = 0
+        peak = 0
+        max_dd = 0
+        for p in pnls:
+            cumulative += p
+            if cumulative > peak:
+                peak = cumulative
+            dd = peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+        return {
+            "total_trades":   len(rows),
+            "win_rate":       round(win_rate * 100, 1),
+            "profit_factor":  round(profit_factor, 2),
+            "expectancy":     round(expectancy, 3),
+            "sharpe":         round(sharpe, 2),
+            "max_drawdown":   round(max_dd, 2),
+            "avg_win_pct":    round(avg_win, 2),
+            "avg_loss_pct":   round(avg_loss, 2),
+        }
+    except Exception as e:
+        log(f"  [DB] Metrics error: {e}", "warning")
+        return {}
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
 DREAM_EVERY    = 20
 dream_counter  = 0
@@ -1230,6 +1378,33 @@ def check_market_conditions():
     except Exception as e:
         log(f"  [MARKET CHECK] Error: {e} - allowing trade", "warning")
         return True, "Market check failed - defaulting to allow"
+
+def check_circuit_breakers(symbol: str, closes: list) -> tuple:
+    """
+    Additional circuit breakers per reviewer recommendations.
+    Returns (ok: bool, reason: str)
+    """
+    try:
+        # Volatility shock: if last candle moved > 8% halt
+        if len(closes) >= 2:
+            last_move = abs(closes[-1] - closes[-2]) / closes[-2] * 100
+            if last_move > 8.0:
+                return False, f"Volatility shock: {last_move:.1f}% candle move on {symbol}"
+
+        # Rapid consecutive moves: 3 candles all > 3% same direction
+        if len(closes) >= 4:
+            moves = [(closes[i] - closes[i-1]) / closes[i-1] * 100
+                     for i in range(-3, 0)]
+            all_up   = all(m > 3 for m in moves)
+            all_down = all(m < -3 for m in moves)
+            if all_up:
+                return False, f"Parabolic move detected on {symbol} — avoid chasing"
+            if all_down:
+                return False, f"Freefall detected on {symbol} — avoid catching knife"
+
+        return True, "Circuit breakers OK"
+    except Exception as e:
+        return True, f"Breaker check error: {e}"
 
 def check_usdt_safety(min_usdt=10.0):
     """Ensure we have enough USDT before trading"""
@@ -2120,6 +2295,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                         _sizing = risk_sizer(
                             usdt=bal, confidence=conf,
                             closes=_cls_rs, sl_pct=cfg.get("sl", 0.05),
+                            max_pct=0.05,   # CRITICAL FIX: was 0.40, now 5% max
                         )
                         if _sizing["amount"] < 2:
                             log(f"  [SIZER] BLOCKED {symbol}: {_sizing['reason']}")
@@ -2559,6 +2735,10 @@ def run_cycle():
                 if len(closes) < 35:
                     continue
                 price = closes[-1]
+                _cb_ok, _cb_reason = check_circuit_breakers(sym, closes)
+                if not _cb_ok:
+                    log(f"  [BREAKER] {sym}: {_cb_reason}")
+                    continue
                 sig   = unified_signal(sym, closes, "crypto", strategy)
                 sig["price"]  = price
                 sig["cfg"]    = {**cfg, "pct": 40}
@@ -2775,6 +2955,7 @@ def run_cycle():
             "trade_log_size": len(trade_log),
         },
         "version": "v9",
+        "metrics": db_get_metrics(),
         "uptime_cycles": cycle_count,
     }
     push_status(status)
@@ -3100,6 +3281,7 @@ def get_available_capital(exchange):
 
 def main():
     build_ai_providers()
+    init_db()   # FIX 3: initialise SQLite trade journal
     log("=" * 55)
     log("  ACCRA BOT v9 - MULTI-AI POWERHOUSE ENGINE")
     log(f"  Crypto:  ALL top coins {'[ON]' if BINANCE_KEY else '[NO KEY]'}")
