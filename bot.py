@@ -13,6 +13,16 @@ try:
     UPGRADES_ENABLED = True
 except Exception as _upg_err:
     UPGRADES_ENABLED = False
+
+try:
+    from neural_signal import (
+        neural_score, save_pending_features,
+        resolve_trade_outcome, nn_status, print_nn_status,
+    )
+    NN_ENABLED = True
+except Exception as _nn_err:
+    NN_ENABLED = False
+    print(f"[NN] Not loaded: {_nn_err}")
     print(f"[UPGRADES] Not loaded: {_upg_err}")
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -2117,6 +2127,66 @@ def execute(symbol, signal, price, cfg, conf, market):
                         log(f"  [SIZER] {symbol}: {_sizing['reason']}")
                         # Override amount with risk-sized amount
                         amount = _sizing["amount"]
+
+                    # ── NEURAL NETWORK GATE ───────────────────────────────
+                    if NN_ENABLED:
+                        try:
+                            from datetime import datetime as _dtnn, timezone as _tznn
+                            import requests as _rqnn
+                            # Gather features for NN
+                            _cls_nn  = get_crypto_closes(symbol, 50)
+                            _rsi_nn  = calc_rsi(_cls_nn) if len(_cls_nn) > 14 else 50.0
+                            _macd_nn = calc_macd(_cls_nn)
+                            _bb_nn   = calc_bb(_cls_nn)
+                            _ema9_nn = calc_ema(_cls_nn, 9)
+                            _ema21_nn= calc_ema(_cls_nn, 21)
+                            _ema_cross_nn = 0
+                            if _ema9_nn and _ema21_nn:
+                                _ema_cross_nn = 1 if _ema9_nn[-1] > _ema21_nn[-1] else -1
+                            _mom_nn = (_cls_nn[-1]/_cls_nn[-6]-1)*100 if len(_cls_nn)>=6 else 0
+                            _moves_nn = [abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-20,-1)] if len(_cls_nn)>=20 else [0]
+                            _avg_move_nn = sum(_moves_nn)/len(_moves_nn) if _moves_nn else 1
+                            _last_move_nn = abs(_cls_nn[-1]-_cls_nn[-2]) if len(_cls_nn)>=2 else 0
+                            _vol_ratio_nn = _last_move_nn/_avg_move_nn if _avg_move_nn > 0 else 1.0
+                            _atr_nn = sum(abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-14,-1))/(13*_cls_nn[-1]) if len(_cls_nn)>=14 else 0.01
+                            _fg_nn  = _fg_cache.get("value", 50)
+                            _hour_nn = _dtnn.now(_tznn.utc).hour
+                            # BTC 4h trend
+                            _btc_trend_nn = 0.0
+                            try:
+                                _r_btc = _rqnn.get("https://api.binance.com/api/v3/klines",
+                                    params={"symbol":"BTCUSDT","interval":"4h","limit":2},timeout=5)
+                                if _r_btc.ok:
+                                    _kk = _r_btc.json()
+                                    _btc_trend_nn = (float(_kk[-1][4])-float(_kk[0][4]))/float(_kk[0][4])*100
+                            except Exception: pass
+
+                            _nn_result = neural_score(
+                                rsi=_rsi_nn,
+                                macd_hist=_macd_nn.get("histogram", 0),
+                                bb_pct=_bb_nn.get("pct_b", 0.5),
+                                ema_cross=_ema_cross_nn,
+                                momentum=_mom_nn,
+                                vol_ratio=_vol_ratio_nn,
+                                atr_pct=_atr_nn,
+                                fear_greed=_fg_nn,
+                                score=conf,
+                                confidence=conf,
+                                hour_utc=_hour_nn,
+                                btc_trend_pct=_btc_trend_nn,
+                            )
+                            log(f"  [NN] {symbol} quality={_nn_result['quality']:.2f} {_nn_result['label']}")
+                            if not _nn_result["gate"]:
+                                log(f"  [NN] BLOCKED {symbol}: {_nn_result['reason']}")
+                                return False
+                            # Save features so we can record outcome later
+                            _trade_id = f"{symbol}_{int(time.time())}"
+                            save_pending_features(_trade_id, _nn_result["features"])
+                            # Store trade_id so execute caller can resolve it
+                            open_trades.setdefault(symbol, {})["nn_trade_id"] = _trade_id
+                        except Exception as _nn_e:
+                            log(f"  [NN] Gate error: {_nn_e}", "warning")
+                    # ─────────────────────────────────────────────────────
 
                     except Exception as _upg_exec_e:
                         log(f"  [UPGRADES] execute error: {_upg_exec_e}", "warning")
