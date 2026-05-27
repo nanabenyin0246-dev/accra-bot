@@ -2260,31 +2260,34 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if conf < 25:
                     log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
                     return False
-                # â”€â”€ CRITIC AGENT + DSR GATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                # Get balance FIRST before any upgrade checks use it
+
+                # Get balance early — needed by all upgrade checks below
                 bal = get_crypto_balance("USDT")
 
+                # ── UPGRADES: Critic (advisory) + DSR Gate + Risk Sizer ──────
                 if UPGRADES_ENABLED:
                     try:
-                        # 1. Critic agent â€” adversarial AI review
+                        # 1. Critic — advisory only, never blocks execution
                         _fg_val_now = _fg_cache.get("value", 50)
-                        _critic = critic_agent(
-                            symbol=symbol, signal=signal,
-                            score=conf, confidence=conf,
-                            rsi=calc_rsi(get_crypto_closes(symbol, 30)),
-                            reasons=[], usdt=bal,
-                            open_trades=len(open_trades),
-                            fear_greed=_fg_val_now,
-                            market=market,
-                            call_ai_fn=call_multi_ai,
-                        )
-                        if not _critic["approved"]:
-                            log(f"  [CRITIC ADVISORY] (non-blocking) {symbol}: {_critic['verdict']}")
-                            pass  # FIX 2: advisory only — never blocks execution
-                        # Adjust confidence from critic
-                        conf = max(0, min(100, conf + max(-10, _critic.get("confidence_adj", 0))))
+                        try:
+                            _critic = critic_agent(
+                                symbol=symbol, signal=signal,
+                                score=conf, confidence=conf,
+                                rsi=calc_rsi(get_crypto_closes(symbol, 30)),
+                                reasons=[], usdt=bal,
+                                open_trades=len(open_trades),
+                                fear_greed=_fg_val_now,
+                                market=market,
+                                call_ai_fn=call_multi_ai,
+                            )
+                            _verdict = _critic.get("verdict", "")
+                            if not _critic.get("approved", True):
+                                log(f"  [CRITIC ADVISORY] {symbol}: {_verdict[:60]}")
+                            conf = max(0, min(100, conf + max(-10, _critic.get("confidence_adj", 0))))
+                        except Exception as _ce:
+                            log(f"  [CRITIC] Skipped: {_ce}", "warning")
 
-                        # 2. Deflated Sharpe gate â€” multiple-testing correction
+                        # 2. Deflated Sharpe gate
                         _cls_dsr = get_crypto_closes(symbol, 50)
                         if len(_cls_dsr) >= 20:
                             _rets = returns_from_closes(_cls_dsr, signal_position=1)
@@ -2293,83 +2296,68 @@ def execute(symbol, signal, price, cfg, conf, market):
                                 log(f"  [DSR] BLOCKED {symbol}: {_dsr['reason']}")
                                 return False
 
-                        # 3. Risk sizer â€” volatility-adjusted Kelly sizing
+                        # 3. Risk sizer — 5% max position
                         _cls_rs = get_crypto_closes(symbol, 30)
                         _sizing = risk_sizer(
                             usdt=bal, confidence=conf,
                             closes=_cls_rs, sl_pct=cfg.get("sl", 0.05),
-                            max_pct=0.05,   # CRITICAL FIX: was 0.40, now 5% max
+                            max_pct=0.05,
                         )
-                        if _sizing["amount"] < 2:
-                            log(f"  [SIZER] BLOCKED {symbol}: {_sizing['reason']}")
-                            return False
-                        log(f"  [SIZER] {symbol}: {_sizing['reason']}")
-                        # Override amount with risk-sized amount
-                        amount = _sizing["amount"]
+                        if _sizing["amount"] >= 2:
+                            amount = _sizing["amount"]
+                            log(f"  [SIZER] {symbol}: {_sizing['reason']}")
 
-                # ── NEURAL NETWORK GATE ─────────────────────────────────
+                    except Exception as _upg_e:
+                        log(f"  [UPGRADES] execute error: {_upg_e}", "warning")
+
+                # ── Neural Network Gate ──────────────────────────────────────
                 if NN_ENABLED:
+                    try:
+                        from datetime import datetime as _dtnn, timezone as _tznn
+                        import requests as _rqnn
+                        _cls_nn   = get_crypto_closes(symbol, 50)
+                        _rsi_nn   = calc_rsi(_cls_nn) if len(_cls_nn) > 14 else 50.0
+                        _macd_nn  = calc_macd(_cls_nn)
+                        _bb_nn    = calc_bb(_cls_nn)
+                        _ema9_nn  = calc_ema(_cls_nn, 9)
+                        _ema21_nn = calc_ema(_cls_nn, 21)
+                        _ema_cross_nn = 0
+                        if _ema9_nn and _ema21_nn:
+                            _ema_cross_nn = 1 if _ema9_nn[-1] > _ema21_nn[-1] else -1
+                        _mom_nn = (_cls_nn[-1]/_cls_nn[-6]-1)*100 if len(_cls_nn)>=6 else 0
+                        _moves_nn = [abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-20,-1)] if len(_cls_nn)>=20 else [0.01]
+                        _avg_move_nn = sum(_moves_nn)/len(_moves_nn) if _moves_nn else 1
+                        _last_move_nn = abs(_cls_nn[-1]-_cls_nn[-2]) if len(_cls_nn)>=2 else 0
+                        _vol_ratio_nn = _last_move_nn/_avg_move_nn if _avg_move_nn > 0 else 1.0
+                        _atr_nn = sum(abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-14,-1))/(13*_cls_nn[-1]) if len(_cls_nn)>=14 and _cls_nn[-1]>0 else 0.01
+                        _fg_nn  = _fg_cache.get("value", 50)
+                        _hour_nn = _dtnn.now(_tznn.utc).hour
+                        _btc_trend_nn = 0.0
                         try:
-                            from datetime import datetime as _dtnn, timezone as _tznn
-                            import requests as _rqnn
-                            # Gather features for NN
-                            _cls_nn  = get_crypto_closes(symbol, 50)
-                            _rsi_nn  = calc_rsi(_cls_nn) if len(_cls_nn) > 14 else 50.0
-                            _macd_nn = calc_macd(_cls_nn)
-                            _bb_nn   = calc_bb(_cls_nn)
-                            _ema9_nn = calc_ema(_cls_nn, 9)
-                            _ema21_nn= calc_ema(_cls_nn, 21)
-                            _ema_cross_nn = 0
-                            if _ema9_nn and _ema21_nn:
-                                _ema_cross_nn = 1 if _ema9_nn[-1] > _ema21_nn[-1] else -1
-                            _mom_nn = (_cls_nn[-1]/_cls_nn[-6]-1)*100 if len(_cls_nn)>=6 else 0
-                            _moves_nn = [abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-20,-1)] if len(_cls_nn)>=20 else [0]
-                            _avg_move_nn = sum(_moves_nn)/len(_moves_nn) if _moves_nn else 1
-                            _last_move_nn = abs(_cls_nn[-1]-_cls_nn[-2]) if len(_cls_nn)>=2 else 0
-                            _vol_ratio_nn = _last_move_nn/_avg_move_nn if _avg_move_nn > 0 else 1.0
-                            _atr_nn = sum(abs(_cls_nn[i]-_cls_nn[i-1]) for i in range(-14,-1))/(13*_cls_nn[-1]) if len(_cls_nn)>=14 else 0.01
-                            _fg_nn  = _fg_cache.get("value", 50)
-                            _hour_nn = _dtnn.now(_tznn.utc).hour
-                            # BTC 4h trend
-                            _btc_trend_nn = 0.0
-                            try:
-                                _r_btc = _rqnn.get("https://api.binance.com/api/v3/klines",
-                                    params={"symbol":"BTCUSDT","interval":"4h","limit":2},timeout=5)
-                                if _r_btc.ok:
-                                    _kk = _r_btc.json()
-                                    _btc_trend_nn = (float(_kk[-1][4])-float(_kk[0][4]))/float(_kk[0][4])*100
-                            except Exception: pass
+                            _r_btc = _rqnn.get("https://api.binance.com/api/v3/klines",
+                                params={"symbol":"BTCUSDT","interval":"4h","limit":2},timeout=5)
+                            if _r_btc.ok:
+                                _kk = _r_btc.json()
+                                _btc_trend_nn = (float(_kk[-1][4])-float(_kk[0][4]))/float(_kk[0][4])*100
+                        except Exception:
+                            pass
+                        _nn_result = neural_score(
+                            rsi=_rsi_nn, macd_hist=_macd_nn.get("histogram", 0),
+                            bb_pct=_bb_nn.get("pct_b", 0.5), ema_cross=_ema_cross_nn,
+                            momentum=_mom_nn, vol_ratio=_vol_ratio_nn, atr_pct=_atr_nn,
+                            fear_greed=_fg_nn, score=conf, confidence=conf,
+                            hour_utc=_hour_nn, btc_trend_pct=_btc_trend_nn,
+                        )
+                        log(f"  [NN] {symbol} quality={_nn_result['quality']:.2f} {_nn_result['label']}")
+                        if not _nn_result["gate"]:
+                            log(f"  [NN] BLOCKED {symbol}: {_nn_result['reason']}")
+                            return False
+                        _trade_id = f"{symbol}_{int(time.time())}"
+                        save_pending_features(_trade_id, _nn_result["features"])
+                        open_trades.setdefault(symbol, {})["nn_trade_id"] = _trade_id
+                    except Exception as _nn_e:
+                        log(f"  [NN] Gate error: {_nn_e}", "warning")
 
-                            _nn_result = neural_score(
-                                rsi=_rsi_nn,
-                                macd_hist=_macd_nn.get("histogram", 0),
-                                bb_pct=_bb_nn.get("pct_b", 0.5),
-                                ema_cross=_ema_cross_nn,
-                                momentum=_mom_nn,
-                                vol_ratio=_vol_ratio_nn,
-                                atr_pct=_atr_nn,
-                                fear_greed=_fg_nn,
-                                score=conf,
-                                confidence=conf,
-                                hour_utc=_hour_nn,
-                                btc_trend_pct=_btc_trend_nn,
-                            )
-                            log(f"  [NN] {symbol} quality={_nn_result['quality']:.2f} {_nn_result['label']}")
-                            if not _nn_result["gate"]:
-                                log(f"  [NN] BLOCKED {symbol}: {_nn_result['reason']}")
-                                return False
-                            # Save features so we can record outcome later
-                            _trade_id = f"{symbol}_{int(time.time())}"
-                            save_pending_features(_trade_id, _nn_result["features"])
-                            # Store trade_id so execute caller can resolve it
-                            open_trades.setdefault(symbol, {})["nn_trade_id"] = _trade_id
-                        except Exception as _nn_e:
-                            log(f"  [NN] Gate error: {_nn_e}", "warning")
-                    # ─────────────────────────────────────────────────────
-
-                    except Exception as _upg_exec_e:
-                        log(f"  [UPGRADES] execute error: {_upg_exec_e}", "warning")
-                # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
                 # RE-ENTRY FILTER: Don't re-buy within 3% of last SL price (Lo & Remorov)
                 sl_memory = _reentry_block.get(symbol)
