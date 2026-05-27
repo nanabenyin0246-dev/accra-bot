@@ -734,7 +734,7 @@ def build_ai_providers():
     SAMBANOVA_KEY = os.getenv("SAMBANOVA_KEY", "")
     if SAMBANOVA_KEY:
         AI_PROVIDERS.append({"name":"sambanova","url":"https://api.sambanova.ai/v1/chat/completions",
-            "model":"Meta-Llama-3.3-70B","headers":{"Authorization":f"Bearer {SAMBANOVA_KEY}","Content-Type":"application/json"},"max_tokens":300})
+            "model":"Meta-Llama-3.1-70B-Instruct","headers":{"Authorization":f"Bearer {SAMBANOVA_KEY}","Content-Type":"application/json"},"max_tokens":300})
     if DEEPSEEK_KEY and False:  # disabled - insufficient balance
         AI_PROVIDERS.append({"name":"deepseek","url":"https://api.deepseek.com/chat/completions",
             "model":"deepseek-chat","headers":{"Authorization":f"Bearer {DEEPSEEK_KEY}","Content-Type":"application/json"},"max_tokens":300})
