@@ -505,7 +505,7 @@ GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 LOG_FILE       = "trade_log.json"
-DB_FILE = "trades.db"
+DB_FILE = os.getenv("DB_PATH", "trades.db")
 
 def init_db():
     """Initialise SQLite trade journal. Safe to call multiple times."""
