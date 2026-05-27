@@ -1,8 +1,8 @@
-import os, time, json, hmac, hashlib, requests, logging, re
+﻿import os, time, json, hmac, hashlib, requests, logging, re
 from datetime import datetime
 from urllib.parse import urlencode
 
-# â”€â”€ ZOSTAFF UPGRADES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬ ZOSTAFF UPGRADES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 try:
     from bot_upgrades import (
         kill_switch, critic_agent, risk_sizer,
@@ -24,7 +24,7 @@ except Exception as _nn_err:
     NN_ENABLED = False
     print(f"[NN] Not loaded: {_nn_err}")
     print(f"[UPGRADES] Not loaded: {_upg_err}")
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 logging.basicConfig(filename="bot.log", level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s")
@@ -33,7 +33,7 @@ def log(msg, level="info"):
     print(msg)
     getattr(logging, level)(msg)
 
-# ── HYPERLIQUID ───────────────────────────────────────────
+# â”€â”€ HYPERLIQUID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 try:
     from hyperliquid_trader import hl_place_order, hl_get_balance, hl_get_positions, hl_close_position
     HL_ENABLED = True
@@ -55,7 +55,7 @@ def hl_trade(signal, coin="SOL", pct=0.2):
     except Exception as e:
         log("[HL] Trade error: %s" % e)
 
-# ── TRADE.XYZ ────────────────────────────────────────────
+# â”€â”€ TRADE.XYZ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 try:
     pass  # xyz disabled - resumes when Binance hits $100
     XYZ_ENABLED = True
@@ -386,7 +386,7 @@ def xyz_scan_and_trade():
 
             result = xyz_place_order(best_ticker, is_buy, amount, leverage=lev)
             status = result.get("status")
-            log("[XYZ] %s %s $%.2f → %s" % (
+            log("[XYZ] %s %s $%.2f â†’ %s" % (
                 direction, best_ticker, amount, status))
 
             if status == "ok":
@@ -496,7 +496,7 @@ GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 LOG_FILE       = "trade_log.json"
-DB_FILE        = os.path.expanduser("~/accra-bot/trades.db")
+DB_FILE = "trades.db"
 
 def init_db():
     """Initialise SQLite trade journal. Safe to call multiple times."""
@@ -594,7 +594,7 @@ def db_log_trade(entry: dict):
         con.commit()
         con.close()
     except Exception as e:
-        log(f"  [DB] Write error: {e} — falling back to JSON", "warning")
+        log(f"  [DB] Write error: {e} â€” falling back to JSON", "warning")
         log_trade(entry)   # fallback
 
 def db_get_metrics() -> dict:
@@ -661,7 +661,7 @@ DEFAULT_STRATEGY = {
     "top_n_stocks": 30,
     "sl_multiplier": 1.0,
     "tp_multiplier": 1.0,
-    "avoid_assets": ["STOUSDT","SOLVUSDT","BIFIUSDT","NIGHTUSDT","DUSDT","UUSDT","币安人生USDT"],
+    "avoid_assets": ["STOUSDT","SOLVUSDT","BIFIUSDT","NIGHTUSDT","DUSDT","UUSDT","å¸å®‰äººç”ŸUSDT"],
     "prefer_assets": [],
     "market_condition": "neutral",
     "updated_by": "default",
@@ -1398,9 +1398,9 @@ def check_circuit_breakers(symbol: str, closes: list) -> tuple:
             all_up   = all(m > 3 for m in moves)
             all_down = all(m < -3 for m in moves)
             if all_up:
-                return False, f"Parabolic move detected on {symbol} — avoid chasing"
+                return False, f"Parabolic move detected on {symbol} â€” avoid chasing"
             if all_down:
-                return False, f"Freefall detected on {symbol} — avoid catching knife"
+                return False, f"Freefall detected on {symbol} â€” avoid catching knife"
 
         return True, "Circuit breakers OK"
     except Exception as e:
@@ -1434,22 +1434,22 @@ def classify_signal_tier(score, reasons, symbol):
     
     # FLASH: score >= 45 + at least 2 strong reasons
     if score >= 45 and len(strong_reasons) >= 2:
-        return "FLASH", f"🔴 FLASH signal - {len(strong_reasons)} strong confluences"
+        return "FLASH", f"ðŸ”´ FLASH signal - {len(strong_reasons)} strong confluences"
     
     # FLASH: extreme oversold + MACD crossover (rare combo)
     if score >= 40 and "MACD bullish crossover" in str(reasons) and "deep oversold" in str(reasons):
-        return "FLASH", "🔴 FLASH - Oversold + MACD crossover"
+        return "FLASH", "ðŸ”´ FLASH - Oversold + MACD crossover"
     
     # PRIORITY: score >= 30 + at least 1 strong reason
     if score >= 30 and len(strong_reasons) >= 1:
-        return "PRIORITY", f"🟡 PRIORITY signal - score:{score}"
+        return "PRIORITY", f"ðŸŸ¡ PRIORITY signal - score:{score}"
     
     # PRIORITY: score >= 35 even without strong reasons
     if score >= 35:
-        return "PRIORITY", f"🟡 PRIORITY signal - score:{score}"
+        return "PRIORITY", f"ðŸŸ¡ PRIORITY signal - score:{score}"
     
     # ROUTINE: everything else - skip
-    return "ROUTINE", f"🔵 ROUTINE - score too low ({score}), skipping"
+    return "ROUTINE", f"ðŸ”µ ROUTINE - score too low ({score}), skipping"
 
 def get_trading_window():
     """
@@ -2261,13 +2261,13 @@ def execute(symbol, signal, price, cfg, conf, market):
                     log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
                     return False
 
-                # Get balance early — needed by all upgrade checks below
+                # Get balance early â€” needed by all upgrade checks below
                 bal = get_crypto_balance("USDT")
 
-                # ── UPGRADES: Critic (advisory) + DSR Gate + Risk Sizer ──────
+                # â”€â”€ UPGRADES: Critic (advisory) + DSR Gate + Risk Sizer â”€â”€â”€â”€â”€â”€
                 if UPGRADES_ENABLED:
                     try:
-                        # 1. Critic — advisory only, never blocks execution
+                        # 1. Critic â€” advisory only, never blocks execution
                         _fg_val_now = _fg_cache.get("value", 50)
                         try:
                             _critic = critic_agent(
@@ -2296,7 +2296,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                                 log(f"  [DSR] BLOCKED {symbol}: {_dsr['reason']}")
                                 return False
 
-                        # 3. Risk sizer — 5% max position
+                        # 3. Risk sizer â€” 5% max position
                         _cls_rs = get_crypto_closes(symbol, 30)
                         _sizing = risk_sizer(
                             usdt=bal, confidence=conf,
@@ -2310,7 +2310,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                     except Exception as _upg_e:
                         log(f"  [UPGRADES] execute error: {_upg_e}", "warning")
 
-                # ── Neural Network Gate ──────────────────────────────────────
+                # â”€â”€ Neural Network Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if NN_ENABLED:
                     try:
                         from datetime import datetime as _dtnn, timezone as _tznn
@@ -2388,7 +2388,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                     min_confidence=strategy.get("min_confidence", 55)
                 )
                 if not _decision["trade"]:
-                    log(f"  SKIP {symbol}: Quant blocked — {_decision['reason']}")
+                    log(f"  SKIP {symbol}: Quant blocked â€” {_decision['reason']}")
                     return False
                 amount = _decision["position_size"]
                 log(f"  [QUANT] adj={_decision['adjusted_confidence']:.1f}% EV={_decision.get('ev',0):.3f}% size=${amount}")
@@ -2619,7 +2619,7 @@ def run_cycle():
     global cycle_count
     cycle_count += 1
 
-    # â”€â”€ KILL-SWITCH CHECK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Ã¢â€â‚¬Ã¢â€â‚¬ KILL-SWITCH CHECK Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     if UPGRADES_ENABLED:
         try:
             _usdt_now = get_crypto_balance("USDT")
@@ -2656,11 +2656,11 @@ def run_cycle():
                     # Only hard-halt blocks the whole cycle
                     # Max open trades just blocks new buys, not the cycle
                     if kill_switch.halted:
-                        log("  [KILL-SWITCH] Cycle aborted â€” manual reset required")
+                        log("  [KILL-SWITCH] Cycle aborted Ã¢â‚¬â€ manual reset required")
                         return
         except Exception as _ks_e:
             log(f"  [KILL-SWITCH] Check error: {_ks_e}", "warning")
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     # ASSET TRADING - runs every cycle when USDT is low
     try:
@@ -3220,12 +3220,12 @@ def log_intel_summary():
         _gs, _gr = get_geopolitical_score()
         _ts, _tr = get_trump_analysis_score()
         _blackout, _br = is_weekend_blackout()
-        geo_label = ("🟢 +" if _gs > 0 else "🔴 " if _gs < 0 else "⚪ ") + str(_gs)
-        trump_label = ("🟢 +" if _ts > 0 else "🔴 " if _ts < 0 else "⚪ ") + str(_ts)
+        geo_label = ("ðŸŸ¢ +" if _gs > 0 else "ðŸ”´ " if _gs < 0 else "âšª ") + str(_gs)
+        trump_label = ("ðŸŸ¢ +" if _ts > 0 else "ðŸ”´ " if _ts < 0 else "âšª ") + str(_ts)
         print(f"  GEO     : {geo_label} | {_gr[:50]}")
         print(f"  TRUMP   : {trump_label} | {_tr[:50]}")
         if _blackout:
-            print(f"  ⛔ {_br}")
+            print(f"  â›” {_br}")
     except Exception as e:
         print(f"  GEO/TRUMP: error {e}")
     try:
@@ -3305,12 +3305,12 @@ def main():
     log(f"  Interval:{SLEEP_SECS}s")
     log("=" * 55)
 
-    # â”€â”€ UPGRADES STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Ã¢â€â‚¬Ã¢â€â‚¬ UPGRADES STATUS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     if UPGRADES_ENABLED:
         print_upgrade_status()
     else:
-        log("  âš   bot_upgrades.py not found â€” running without upgrades", "warning")
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        log("  Ã¢Å¡Â   bot_upgrades.py not found Ã¢â‚¬â€ running without upgrades", "warning")
+    # Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     if not any([BINANCE_KEY, ALPACA_KEY, HFM_ACCOUNT, EXNESS_LOGIN]):
         log("ERROR: No API keys set", "error")
@@ -3369,14 +3369,14 @@ def main():
         except Exception as e:
             log(f"[Cycle error] {e}", "error")
             telegram(f"<b>CYCLE ERROR</b>\n{e}")
-        # ── Dream cycle ──────────────────────────────────
+        # â”€â”€ Dream cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         global dream_counter
         dream_counter += 1
         if dream_counter >= DREAM_EVERY:
             dream_counter = 0
             run_dream_cycle()
 
-        # ── trade.xyz independent scan ────────────────────
+        # â”€â”€ trade.xyz independent scan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if XYZ_ENABLED: xyz_scan_and_trade()
 
         log(f"\n  Sleeping {SLEEP_SECS}s...")
@@ -3394,3 +3394,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
