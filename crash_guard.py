@@ -14,11 +14,13 @@ def send_telegram(msg):
         except:
             pass
 
-def run_with_guard():
+while True:
     try:
         import bot
+        bot.main()
+    except SystemExit:
+        break
     except Exception as e:
         err = traceback.format_exc()
-        send_telegram(f"🚨 ACCRA BOT CRASHED:\n{err[-1000:]}")
-        time.sleep(10)
-        sys.exit(1)
+        send_telegram(f"ACCRA BOT CRASHED:\n{err[-1000:]}")
+        time.sleep(30)
