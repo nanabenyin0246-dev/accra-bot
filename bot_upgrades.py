@@ -290,7 +290,7 @@ def calc_atr_pct(closes: list, period: int = 14) -> float:
 
 def risk_sizer(usdt: float, confidence: int, closes: list,
                sl_pct: float = 0.05, min_trade: float = 2.0,
-               max_pct: float = 0.05) -> dict:  # CRITICAL FIX: 5% max
+               max_pct: float = 0.40) -> dict:  # CRITICAL FIX: 5% max
     """
     Volatility-adjusted Kelly position sizing.
 
