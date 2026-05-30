@@ -2083,7 +2083,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                     fear_greed=_fg_cache.get("value", 50),
                     market_condition=cfg.get("market_condition", "neutral"),
                     current_balance=bal,
-                    starting_balance=70.0,
+                    starting_balance=6.0,
                     consecutive_losses=0,
                     sl_multiplier=1.0,
                     tp_multiplier=_tp_ratio,
