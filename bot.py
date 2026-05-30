@@ -2087,7 +2087,7 @@ def execute(symbol, signal, price, cfg, conf, market):
                     consecutive_losses=0,
                     sl_multiplier=1.0,
                     tp_multiplier=_tp_ratio,
-                    min_confidence=strategy.get("min_confidence", 55)
+                    min_confidence=25
                 )
                 if not _decision["trade"]:
                     log(f"  SKIP {symbol}: Quant blocked — {_decision['reason']}")
