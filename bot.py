@@ -475,6 +475,7 @@ PAPER_MODE     = os.getenv("PAPER_MODE", "true").lower() not in ("false", "0", "
 _raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
 MAX_DAILY_LOSS_USD = float(_raw_mdl) if _raw_mdl else None
 LOG_FILE       = "trade_log.json"
+DAILY_LOSS_FILE = "daily_loss_state.json"
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
 DREAM_EVERY    = 20
 dream_counter  = 0
@@ -2381,6 +2382,39 @@ def activate_failsafe(reason):
     return FAILSAFE_STRATEGY.copy()
 
 
+def _save_daily_loss_state():
+    """Write running P&L total and window start to disk so a restart can resume them."""
+    try:
+        with open(DAILY_LOSS_FILE, "w") as f:
+            json.dump({
+                "pnl_usd": _daily_realized_pnl_usd,
+                "window_start": (_daily_pnl_window_start or datetime.now()).isoformat(),
+            }, f)
+    except Exception as e:
+        log(f"  [DAILY LOSS] Save failed: {e}", "warning")
+
+
+def _load_daily_loss_state():
+    """Load persisted P&L state on startup; resets if the stored window is older than 24h."""
+    global _daily_realized_pnl_usd, _daily_pnl_window_start
+    try:
+        with open(DAILY_LOSS_FILE) as f:
+            state = json.load(f)
+        ws = datetime.fromisoformat(state["window_start"])
+        if (datetime.now() - ws).total_seconds() < 86400:
+            _daily_realized_pnl_usd = float(state.get("pnl_usd", 0.0))
+            _daily_pnl_window_start = ws
+            log(f"  [DAILY LOSS] Resumed: pnl=${_daily_realized_pnl_usd:+.2f}"
+                f", window started {ws.strftime('%Y-%m-%d %H:%M')}")
+        else:
+            _daily_pnl_window_start = datetime.now()
+            log("  [DAILY LOSS] Previous window expired — starting fresh")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  [DAILY LOSS] Load failed: {e}", "warning")
+
+
 def check_daily_loss_limit():
     """Returns True and blocks new BUY entries if the 24h realized loss hit MAX_DAILY_LOSS_USD."""
     global _daily_realized_pnl_usd, _daily_pnl_window_start, _daily_loss_blocked
@@ -2394,6 +2428,7 @@ def check_daily_loss_limit():
         _daily_pnl_window_start = now
         _daily_loss_blocked = False
         log("  [DAILY LOSS] 24h window reset — kill switch cleared")
+        _save_daily_loss_state()
     if -_daily_realized_pnl_usd >= MAX_DAILY_LOSS_USD:
         if not _daily_loss_blocked:
             _daily_loss_blocked = True
@@ -2570,6 +2605,7 @@ def run_cycle():
         log(f"\n  AUTO-CLOSE {sym}: {reason} | PnL:{pnl:+.2f}% (≈${pnl_usd:+.2f})")
         execute(sym, "SELL", price, sig_cfg, 0, market)
         _daily_realized_pnl_usd += pnl_usd
+        _save_daily_loss_state()
         telegram(
             f"<b>AUTO-CLOSE</b>\n{sym}\n{reason}\n"
             f"Entry:{entry:.4f} Exit:{price:.4f}\nPnL:{pnl:+.2f}%"
@@ -2608,12 +2644,19 @@ def run_cycle():
 
     for sym, sig in sells[:3]:
         log(f"  SELL: {sym} (score:{sig['combined']:+d})")
+        _trade_entry  = open_trades.get(sym, {}).get("entry", sig["price"])
+        _trade_size   = open_trades.get(sym, {}).get("size_usd", 0.0)
         executed = execute(sym, "SELL", sig["price"], sig["cfg"], sig["confidence"], sig["market"])
         if executed:
+            _pnl_pct = round((sig["price"] - _trade_entry) / _trade_entry * 100, 2) if _trade_entry else 0
+            _pnl_usd = round(_trade_size * _pnl_pct / 100, 4)
+            _daily_realized_pnl_usd += _pnl_usd
+            _save_daily_loss_state()
             log_trade({
                 "time": datetime.now().isoformat(), "symbol": sym,
                 "action": "SELL", "price": sig["price"],
                 "combined": sig["combined"], "market": sig["market"],
+                "pnl_pct": _pnl_pct, "pnl_usd": _pnl_usd,
             })
 
     slots = max_open - len(open_trades)
@@ -3027,6 +3070,7 @@ def get_available_capital(exchange):
 
 def main():
     build_ai_providers()
+    _load_daily_loss_state()
     log("=" * 55)
     log("  ACCRA BOT v9 - MULTI-AI POWERHOUSE ENGINE")
     log(f"  Crypto:  ALL top coins {'[ON]' if BINANCE_KEY else '[NO KEY]'}")
@@ -3035,7 +3079,10 @@ def main():
     log(f"  Groq AI: {'ACTIVE' if GROQ_KEY else 'not set'}")
     log(f"  GitHub:  {'ACTIVE' if os.path.exists('.git') else 'not configured'}")
     log(f"  Mode:    {'PAPER (PAPER_MODE=true)' if PAPER_MODE else 'LIVE'}")
-    log(f"  DailyLoss: ${MAX_DAILY_LOSS_USD:.2f} limit" if MAX_DAILY_LOSS_USD else "  DailyLoss: disabled")
+    if MAX_DAILY_LOSS_USD:
+        log(f"  DailyLoss: ${MAX_DAILY_LOSS_USD:.2f} limit | today so far: ${_daily_realized_pnl_usd:+.2f}")
+    else:
+        log("  DailyLoss: disabled")
     log(f"  Interval:{SLEEP_SECS}s")
     build_ai_providers()
     log("=" * 55)
