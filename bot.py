@@ -473,7 +473,8 @@ GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 PAPER_MODE     = os.getenv("PAPER_MODE", "true").lower() not in ("false", "0", "no")
 _raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
-MAX_DAILY_LOSS_USD = float(_raw_mdl) if _raw_mdl else None
+MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
+MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 LOG_FILE       = "trade_log.json"
 DAILY_LOSS_FILE = "daily_loss_state.json"
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
@@ -2110,7 +2111,7 @@ def log_trade(entry):
         log(f"  [Log] {e}", "warning")
 
 
-def execute(symbol, signal, price, cfg, conf, market):
+def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
     # Check dream directives
     _ins = load_insights()
     if _ins:
@@ -2168,8 +2169,18 @@ def execute(symbol, signal, price, cfg, conf, market):
                     return False
                 min_notional = _lot["min_notional"]
                 if amount < min_notional:
-                    log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional ${min_notional:.2f}")
-                    return False
+                    if tier in ("FLASH", "PRIORITY"):
+                        if min_notional > bal * 0.95:
+                            log(f"  SKIP {symbol}: {tier} but can't afford minNotional"
+                                f" ${min_notional:.2f} (avail ${bal*0.95:.2f})")
+                            return False
+                        log(f"  [FLOOR] {symbol}: ${amount:.2f} < minNotional ${min_notional:.2f}"
+                            f" — bumped to floor [{tier}]")
+                        amount = min_notional
+                    else:
+                        log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional"
+                            f" ${min_notional:.2f} [{tier}]")
+                        return False
                 qty = round(amount / price, prec)
                 if prec == 0:
                     qty = int(qty)
@@ -2619,7 +2630,7 @@ def run_cycle():
 
     # RANK SIGNALS
     min_conf = strategy.get("min_confidence", 35)
-    max_open = strategy.get("max_open_trades", 5)
+    max_open = min(strategy.get("max_open_trades", 5), MAX_OPEN_POSITIONS)
 
     buys = []
     for s, r in all_results.items():
@@ -2662,13 +2673,16 @@ def run_cycle():
     slots = max_open - len(open_trades)
     if check_daily_loss_limit():
         log(f"  [DAILY LOSS] Skipping {len(buys)} BUY signal(s) — kill switch active")
+    elif slots <= 0:
+        log(f"  [POS CAP] {len(open_trades)}/{max_open} positions open — skipping {len(buys)} new BUY(s)")
     else:
         for sym, sig in buys[:max(1, slots)]:
             log(f"\n  BUY: {sym} | Score:{sig['combined']:+d} | {sig['market'].upper()}")
             for r in sig["reasons"][:3]:
                 log(f"    - {r}")
             log(f"  AI: {sig.get('fund_reason', '')[:70]}")
-            executed = execute(sym, "BUY", sig["price"], sig["cfg"], sig["confidence"], sig["market"])
+            executed = execute(sym, "BUY", sig["price"], sig["cfg"], sig["confidence"], sig["market"],
+                               tier=sig.get("tier", "PRIORITY"))
             if executed:
                 log_trade({
                     "time":        datetime.now().isoformat(),
