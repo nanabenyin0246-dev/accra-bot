@@ -471,7 +471,12 @@ TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT", "")
 GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
+PAPER_MODE     = os.getenv("PAPER_MODE", "true").lower() not in ("false", "0", "no")
+_raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
+MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
+MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 LOG_FILE       = "trade_log.json"
+DAILY_LOSS_FILE = "daily_loss_state.json"
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
 DREAM_EVERY    = 20
 dream_counter  = 0
@@ -521,6 +526,11 @@ _fund_cache = {}
 _top_crypto_cache = {"coins": [], "ts": 0}
 _top_stock_cache = {"stocks": [], "ts": 0}
 cycle_count = 0
+_lot_size_cache = {}   # symbol -> {"step": float, "decimals": int, "min_notional": float}
+_paper_fills = []      # paper-mode simulated fills
+_daily_realized_pnl_usd = 0.0
+_daily_pnl_window_start = None
+_daily_loss_blocked = False
 
 # ============================================================
 # TRUMP ANALYSIS MODULE - Remove by setting to False
@@ -658,7 +668,6 @@ def get_risk(strategy):
 GIST_ID = "4f5f6918288ddaec0a1fc998af3e6f99"
 
 def push_status(data):
-    log(f"  [DEBUG] GITHUB_TOKEN={GITHUB_TOKEN[:8] if GITHUB_TOKEN else None}")
     try:
         import base64
         content_str = json.dumps(data, indent=2)
@@ -780,20 +789,75 @@ def get_crypto_balance(asset):
     return 0.0
 
 
+def get_lot_info(symbol):
+    """Fetch and cache LOT_SIZE stepSize and minNotional for a symbol from Binance."""
+    if symbol in _lot_size_cache:
+        return _lot_size_cache[symbol]
+    result = {"step": 1.0, "decimals": 0, "min_notional": 5.0}
+    try:
+        r = requests.get(
+            f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
+        filters = r.json()["symbols"][0]["filters"]
+        for f in filters:
+            if f["filterType"] == "LOT_SIZE":
+                step_str = f["stepSize"]
+                result["step"] = float(step_str)
+                trimmed = step_str.rstrip("0")
+                result["decimals"] = len(trimmed.split(".")[-1]) if "." in trimmed else 0
+            elif f["filterType"] in ("NOTIONAL", "MIN_NOTIONAL"):
+                result["min_notional"] = float(f.get("minNotional", 5.0))
+    except Exception as e:
+        log(f"  [LotInfo] {symbol}: {e}", "warning")
+    _lot_size_cache[symbol] = result
+    return result
+
+
 def place_crypto_order(symbol, side, quantity):
     import math
+    lot = get_lot_info(symbol)
+    step = lot["step"]
+    decimals = lot["decimals"]
+    min_notional = lot["min_notional"]
+
+    price = float(requests.get(
+        f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
+        timeout=5).json()["price"])
+
     if side == "BUY":
         avail = get_crypto_balance("USDT")
-        price = float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=5).json()["price"])
-        max_qty = math.floor((avail * 0.95) / price * 10**crypto_precision(symbol)) / 10**crypto_precision(symbol)
+        max_qty = math.floor((avail * 0.95) / price / step) * step
+        max_qty = round(max_qty, decimals)
         if max_qty <= 0:
             raise Exception(f"Insufficient USDT for {symbol}: have ${avail:.2f}")
         quantity = min(quantity, max_qty)
-    prec = crypto_precision(symbol)
-    quantity = math.floor(quantity * 10**prec) / 10**prec
-    if prec == 0: quantity = int(quantity)
+
+    quantity = math.floor(quantity / step) * step
+    quantity = round(quantity, decimals)
     if quantity <= 0:
-        raise Exception(f'Quantity rounds to 0 for {symbol}')
+        raise Exception(f"Quantity rounds to 0 for {symbol}")
+    if quantity * price < min_notional:
+        raise Exception(
+            f"Order value ${quantity * price:.2f} < minNotional ${min_notional:.2f} for {symbol}")
+
+    if PAPER_MODE:
+        fee = round(quantity * price * 0.001, 6)
+        log(f"  [PAPER] {side} {symbol}: qty={quantity} @ ~${price:,.4f}"
+            f" | value=${quantity * price:.2f} | fee≈${fee:.4f}")
+        _paper_fills.append({
+            "time": datetime.now().isoformat(),
+            "symbol": symbol, "side": side,
+            "quantity": quantity, "price": price,
+            "value": round(quantity * price, 4), "fee": fee,
+        })
+        return {
+            "orderId": f"PAPER-{int(time.time() * 1000)}",
+            "symbol": symbol, "side": side,
+            "type": "MARKET", "status": "FILLED",
+            "executedQty": str(quantity),
+            "origQty": str(quantity),
+            "price": "0.00000000",
+        }
+
     ts = binance_time()
     params = {"symbol": symbol, "side": side, "type": "MARKET",
               "quantity": quantity, "timestamp": ts}
@@ -805,36 +869,18 @@ def place_crypto_order(symbol, side, quantity):
 
 
 def get_binance_lot_size(symbol):
-    """Fetch real lot size stepSize and min notional from Binance exchange info."""
-    try:
-        r = requests.get(f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
-        filters = r.json()["symbols"][0]["filters"]
-        for f in filters:
-            if f["filterType"] == "LOT_SIZE":
-                step = float(f["stepSize"])
-                if step >= 1: return 0
-                s = f["stepSize"].rstrip("0")
-                return len(s.split(".")[-1]) if "." in s else 0
-    except:
-        pass
-    return 2
+    """Delegates to cached get_lot_info; returns decimal precision."""
+    return get_lot_info(symbol)["decimals"]
+
 
 def get_min_notional(symbol):
-    """Fetch minimum notional value for a symbol from Binance."""
-    try:
-        r = requests.get(f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}", timeout=10)
-        filters = r.json()["symbols"][0]["filters"]
-        for f in filters:
-            if f["filterType"] in ("NOTIONAL", "MIN_NOTIONAL"):
-                return float(f.get("minNotional", 5.0))
-    except:
-        pass
-    return 5.0
+    """Delegates to cached get_lot_info; returns minNotional in USDT."""
+    return get_lot_info(symbol)["min_notional"]
+
 
 def crypto_precision(symbol):
-    known = {"BTCUSDT": 5, "ETHUSDT": 4, "SOLUSDT": 2, "BNBUSDT": 3, "LINKUSDT": 1, "AVAXUSDT": 1, "LTCUSDT": 2, "UNIUSDT": 2, "FETUSDT": 1, "WLDUSDT": 1, "ADAUSDT": 0, "DOGEUSDT": 0, "XRPUSDT": 0, "NEARUSDT": 0,
-             "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2, "SIGNUSDT": 0, "AAVEUSDT": 3, "BIOUSDT": 0, "ENAUSDT": 0, "CHZUSDT": 0, "PORTALUSDT": 1, "STRKUSDT": 0, "ORDIUSDT": 2, "BOMEUSDT": 0, "TAOUSDT": 2, "ZROUSDT": 2, "TRXUSDT": 0, "PEPEUSDT": 0, "PENGUUSDT": 0}
-    return known.get(symbol, 2)
+    """Legacy: use get_lot_info() for live precision. Kept for external callers."""
+    return get_lot_info(symbol)["decimals"]
 
 
 def alpaca_headers():
@@ -894,6 +940,20 @@ def get_stock_position(symbol):
 
 
 def place_stock_order(symbol, side, notional):
+    if PAPER_MODE:
+        fee = round(notional * 0.001, 4)
+        log(f"  [PAPER] {side.upper()} {symbol}: notional=${notional:.2f} | fee≈${fee:.4f}")
+        _paper_fills.append({
+            "time": datetime.now().isoformat(),
+            "symbol": symbol, "side": side.upper(),
+            "notional": notional, "fee": fee, "market": "stock",
+        })
+        return {
+            "id": f"PAPER-{int(time.time() * 1000)}",
+            "symbol": symbol, "side": side,
+            "type": "market", "status": "filled",
+            "notional": str(round(notional, 2)),
+        }
     body = {"symbol": symbol, "side": side, "type": "market",
             "time_in_force": "day", "notional": str(round(notional, 2))}
     r = requests.post(f"{ALPACA_BASE}/v2/orders",
@@ -978,6 +1038,14 @@ def get_hfm_closes(symbol, periods=100):
 
 
 def place_hfm_signal(symbol, side, amount):
+    if PAPER_MODE:
+        fee = round(amount * 0.001, 4)
+        log(f"  [PAPER HFM] {side} {symbol} ~${amount:.0f} | fee≈${fee:.4f}")
+        _paper_fills.append({
+            "time": datetime.now().isoformat(),
+            "symbol": symbol, "side": side,
+            "notional": amount, "fee": fee, "market": "hfm",
+        })
     log(f"  [HFM SIGNAL] {side} {symbol} ~${amount:.0f}")
     telegram(
         f"<b>FOREX/METAL SIGNAL</b>\n"
@@ -1985,7 +2053,7 @@ def run_dream_cycle():
 
     return insights
 
-def register_trade(symbol, price, cfg, market):
+def register_trade(symbol, price, cfg, market, size_usd=0.0):
     open_trades[symbol] = {
         "entry":      price,
         "sl":         round(price * (1 - cfg["sl"]), 8),
@@ -1994,6 +2062,7 @@ def register_trade(symbol, price, cfg, market):
         "trail_sl":   round(price * (1 - cfg["trail"]), 8),
         "market":     market,
         "time":       datetime.now().isoformat(),
+        "size_usd":   size_usd,
     }
     log(f"  Registered: {symbol} @ {price:.4f} "
         f"SL:{open_trades[symbol]['sl']:.4f} TP:{open_trades[symbol]['tp']:.4f}")
@@ -2042,7 +2111,7 @@ def log_trade(entry):
         log(f"  [Log] {e}", "warning")
 
 
-def execute(symbol, signal, price, cfg, conf, market):
+def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
     # Check dream directives
     _ins = load_insights()
     if _ins:
@@ -2056,7 +2125,8 @@ def execute(symbol, signal, price, cfg, conf, market):
     try:
         if market == "crypto":
             coin = symbol.replace("USDT", "")
-            prec = crypto_precision(symbol)
+            _lot = get_lot_info(symbol)
+            prec = _lot["decimals"]
             if signal == "BUY":
                 if conf < 25:
                     log(f"  SKIP {symbol}: conf {conf}% < 25% minimum")
@@ -2097,20 +2167,34 @@ def execute(symbol, signal, price, cfg, conf, market):
                 if amount < 2:
                     log(f"  SKIP {symbol}: ${amount:.2f} < $2")
                     return False
-                min_notional = get_min_notional(symbol)
+                min_notional = _lot["min_notional"]
                 if amount < min_notional:
-                    log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional ${min_notional:.2f}")
-                    return False
-                qty   = round(amount / price, prec)
-                # Ensure minimum $5 notional value
-                if qty * price < 11:
-                    qty = round(12 / price, prec)
-                # Round to correct precision
-                if prec == 0:
-                    qty = int(qty)
+                    if tier in ("FLASH", "PRIORITY"):
+                        import math as _math
+                        step = _lot["step"]
+                        qty  = _math.ceil(min_notional / price / step) * step
+                        qty  = round(qty, prec)
+                        bumped_cost = round(qty * price, 4)
+                        if bumped_cost > bal * 0.95:
+                            log(f"  SKIP {symbol}: {tier} but can't afford min qty"
+                                f" ${bumped_cost:.2f} (avail ${bal*0.95:.2f})")
+                            return False
+                        log(f"  [FLOOR] {symbol}: ceiled qty={qty}"
+                            f" (${bumped_cost:.2f} >= minNotional ${min_notional:.2f}) [{tier}]")
+                        amount = bumped_cost
+                        if prec == 0:
+                            qty = int(qty)
+                    else:
+                        log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional"
+                            f" ${min_notional:.2f} [{tier}]")
+                        return False
+                else:
+                    qty = round(amount / price, prec)
+                    if prec == 0:
+                        qty = int(qty)
                 order = place_crypto_order(symbol, "BUY", qty)
                 log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
-                register_trade(symbol, price, cfg, "crypto")
+                register_trade(symbol, price, cfg, "crypto", size_usd=amount)
                 telegram(
                     f"<b>CRYPTO BUY</b>\n{symbol} @ ${price:,.4f}\n"
                     f"Qty:{qty} | ${amount:.2f}\nConf:{conf}% | "
@@ -2119,12 +2203,12 @@ def execute(symbol, signal, price, cfg, conf, market):
                 return True
             elif signal == "SELL":
                 bal = get_crypto_balance(coin)
-                qty = round(bal * 0.95, prec)  # Use 95% to avoid rounding errors
-                qty = int(qty) if prec == 0 else qty  # Round to int for DOGE/XRP etc
+                qty = round(bal * 0.95, prec)
+                qty = int(qty) if prec == 0 else qty
                 if qty < 0.00001:
                     log(f"  SKIP {symbol}: no balance")
                     return False
-                min_notional = get_min_notional(symbol)
+                min_notional = _lot["min_notional"]
                 if qty * price < min_notional:
                     log(f"  SKIP {symbol}: notional ${qty*price:.2f} < min ${min_notional:.2f}")
                     return False
@@ -2146,9 +2230,9 @@ def execute(symbol, signal, price, cfg, conf, market):
                     log(f"  SKIP {symbol}: ${amount:.2f} < $1")
                     return False
                 order = place_stock_order(symbol, "buy", amount)
-                mode  = "PAPER" if "paper" in ALPACA_BASE else "LIVE"
+                mode  = "PAPER" if (PAPER_MODE or "paper" in ALPACA_BASE) else "LIVE"
                 log(f"  BOUGHT ${amount:.2f} {symbol} [{mode}]")
-                register_trade(symbol, price, cfg, "stock")
+                register_trade(symbol, price, cfg, "stock", size_usd=amount)
                 telegram(
                     f"<b>STOCK BUY [{mode}]</b>\n{symbol} @ ${price:.2f}\n"
                     f"${amount:.2f} | Conf:{conf}% | "
@@ -2169,7 +2253,7 @@ def execute(symbol, signal, price, cfg, conf, market):
             amount = 100 * (cfg.get("pct", 3) / 3)
             place_hfm_signal(symbol, signal, amount)
             if signal == "BUY":
-                register_trade(symbol, price, cfg, "hfm")
+                register_trade(symbol, price, cfg, "hfm", size_usd=amount)
             else:
                 open_trades.pop(symbol, None)
             return True
@@ -2317,8 +2401,72 @@ def activate_failsafe(reason):
     return FAILSAFE_STRATEGY.copy()
 
 
+def _save_daily_loss_state():
+    """Write running P&L total and window start to disk so a restart can resume them."""
+    try:
+        with open(DAILY_LOSS_FILE, "w") as f:
+            json.dump({
+                "pnl_usd": _daily_realized_pnl_usd,
+                "window_start": (_daily_pnl_window_start or datetime.now()).isoformat(),
+            }, f)
+    except Exception as e:
+        log(f"  [DAILY LOSS] Save failed: {e}", "warning")
+
+
+def _load_daily_loss_state():
+    """Load persisted P&L state on startup; resets if the stored window is older than 24h."""
+    global _daily_realized_pnl_usd, _daily_pnl_window_start
+    try:
+        with open(DAILY_LOSS_FILE) as f:
+            state = json.load(f)
+        ws = datetime.fromisoformat(state["window_start"])
+        if (datetime.now() - ws).total_seconds() < 86400:
+            _daily_realized_pnl_usd = float(state.get("pnl_usd", 0.0))
+            _daily_pnl_window_start = ws
+            log(f"  [DAILY LOSS] Resumed: pnl=${_daily_realized_pnl_usd:+.2f}"
+                f", window started {ws.strftime('%Y-%m-%d %H:%M')}")
+        else:
+            _daily_pnl_window_start = datetime.now()
+            log("  [DAILY LOSS] Previous window expired — starting fresh")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  [DAILY LOSS] Load failed: {e}", "warning")
+
+
+def check_daily_loss_limit():
+    """Returns True and blocks new BUY entries if the 24h realized loss hit MAX_DAILY_LOSS_USD."""
+    global _daily_realized_pnl_usd, _daily_pnl_window_start, _daily_loss_blocked
+    if MAX_DAILY_LOSS_USD is None:
+        return False
+    now = datetime.now()
+    if _daily_pnl_window_start is None:
+        _daily_pnl_window_start = now
+    if (now - _daily_pnl_window_start).total_seconds() >= 86400:
+        _daily_realized_pnl_usd = 0.0
+        _daily_pnl_window_start = now
+        _daily_loss_blocked = False
+        log("  [DAILY LOSS] 24h window reset — kill switch cleared")
+        _save_daily_loss_state()
+    if -_daily_realized_pnl_usd >= MAX_DAILY_LOSS_USD:
+        if not _daily_loss_blocked:
+            _daily_loss_blocked = True
+            msg = (f"Daily loss limit ${MAX_DAILY_LOSS_USD:.2f} reached "
+                   f"(realized: ${_daily_realized_pnl_usd:+.2f})")
+            log(f"  [DAILY LOSS KILL SWITCH] {msg}", "error")
+            telegram(
+                f"<b>DAILY LOSS KILL SWITCH</b>\n"
+                f"{msg}\n"
+                f"New BUY entries blocked until 24h window resets.\n"
+                f"Existing positions are still managed normally."
+            )
+        return True
+    _daily_loss_blocked = False
+    return False
+
+
 def run_cycle():
-    global cycle_count
+    global cycle_count, _daily_realized_pnl_usd
     cycle_count += 1
 
     # ASSET TRADING - runs every cycle when USDT is low
@@ -2469,10 +2617,14 @@ def run_cycle():
     # SL/TP CHECK
     to_close = check_trades(prices)
     for sym, reason, price, market, entry in to_close:
-        pnl     = round((price - entry) / entry * 100, 2)
-        sig_cfg = all_results.get(sym, {}).get("cfg", {**cfg, "pct": 5})
-        log(f"\n  AUTO-CLOSE {sym}: {reason} | PnL:{pnl:+.2f}%")
+        pnl      = round((price - entry) / entry * 100, 2)
+        size_usd = open_trades.get(sym, {}).get("size_usd", 0.0)
+        pnl_usd  = round(size_usd * pnl / 100, 4)
+        sig_cfg  = all_results.get(sym, {}).get("cfg", {**cfg, "pct": 5})
+        log(f"\n  AUTO-CLOSE {sym}: {reason} | PnL:{pnl:+.2f}% (≈${pnl_usd:+.2f})")
         execute(sym, "SELL", price, sig_cfg, 0, market)
+        _daily_realized_pnl_usd += pnl_usd
+        _save_daily_loss_state()
         telegram(
             f"<b>AUTO-CLOSE</b>\n{sym}\n{reason}\n"
             f"Entry:{entry:.4f} Exit:{price:.4f}\nPnL:{pnl:+.2f}%"
@@ -2480,12 +2632,14 @@ def run_cycle():
         log_trade({
             "time": datetime.now().isoformat(), "symbol": sym,
             "action": "CLOSE", "reason": reason,
-            "entry": entry, "exit": price, "pnl": pnl, "market": market,
+            "entry": entry, "exit": price, "pnl": pnl,
+            "pnl_usd": pnl_usd, "market": market,
         })
 
     # RANK SIGNALS
     min_conf = strategy.get("min_confidence", 35)
-    max_open = strategy.get("max_open_trades", 5)
+    max_open = min(strategy.get("max_open_trades", 5), MAX_OPEN_POSITIONS)
+    crypto_open = sum(1 for t in open_trades.values() if t.get("market") == "crypto")
 
     buys = []
     for s, r in all_results.items():
@@ -2510,37 +2664,50 @@ def run_cycle():
 
     for sym, sig in sells[:3]:
         log(f"  SELL: {sym} (score:{sig['combined']:+d})")
+        _trade_entry  = open_trades.get(sym, {}).get("entry", sig["price"])
+        _trade_size   = open_trades.get(sym, {}).get("size_usd", 0.0)
         executed = execute(sym, "SELL", sig["price"], sig["cfg"], sig["confidence"], sig["market"])
         if executed:
+            _pnl_pct = round((sig["price"] - _trade_entry) / _trade_entry * 100, 2) if _trade_entry else 0
+            _pnl_usd = round(_trade_size * _pnl_pct / 100, 4)
+            _daily_realized_pnl_usd += _pnl_usd
+            _save_daily_loss_state()
             log_trade({
                 "time": datetime.now().isoformat(), "symbol": sym,
                 "action": "SELL", "price": sig["price"],
                 "combined": sig["combined"], "market": sig["market"],
+                "pnl_pct": _pnl_pct, "pnl_usd": _pnl_usd,
             })
 
-    slots = max_open - len(open_trades)
-    for sym, sig in buys[:max(1, slots)]:
-        log(f"\n  BUY: {sym} | Score:{sig['combined']:+d} | {sig['market'].upper()}")
-        for r in sig["reasons"][:3]:
-            log(f"    - {r}")
-        log(f"  AI: {sig.get('fund_reason', '')[:70]}")
-        executed = execute(sym, "BUY", sig["price"], sig["cfg"], sig["confidence"], sig["market"])
-        if executed:
-            log_trade({
-                "time":        datetime.now().isoformat(),
-                "symbol":      sym,
-                "action":      "BUY",
-                "price":       sig["price"],
-                "market":      sig["market"],
-                "confidence":  sig["confidence"],
-                "combined":    sig["combined"],
-                "tech":        sig["tech"],
-                "fund":        sig["fund"],
-                "reasons":     sig["reasons"],
-                "fund_reason": sig.get("fund_reason", ""),
-                "top_risk":    sig.get("top_risk", ""),
-                "ghana":       sig.get("ghana", ""),
-            })
+    slots = max_open - crypto_open
+    if check_daily_loss_limit():
+        log(f"  [DAILY LOSS] Skipping {len(buys)} BUY signal(s) — kill switch active")
+    elif slots <= 0:
+        log(f"  [POS CAP] {crypto_open}/{max_open} crypto positions open — skipping {len(buys)} new BUY(s)")
+    else:
+        for sym, sig in buys[:max(1, slots)]:
+            log(f"\n  BUY: {sym} | Score:{sig['combined']:+d} | {sig['market'].upper()}")
+            for r in sig["reasons"][:3]:
+                log(f"    - {r}")
+            log(f"  AI: {sig.get('fund_reason', '')[:70]}")
+            executed = execute(sym, "BUY", sig["price"], sig["cfg"], sig["confidence"], sig["market"],
+                               tier=sig.get("tier", "PRIORITY"))
+            if executed:
+                log_trade({
+                    "time":        datetime.now().isoformat(),
+                    "symbol":      sym,
+                    "action":      "BUY",
+                    "price":       sig["price"],
+                    "market":      sig["market"],
+                    "confidence":  sig["confidence"],
+                    "combined":    sig["combined"],
+                    "tech":        sig["tech"],
+                    "fund":        sig["fund"],
+                    "reasons":     sig["reasons"],
+                    "fund_reason": sig.get("fund_reason", ""),
+                    "top_risk":    sig.get("top_risk", ""),
+                    "ghana":       sig.get("ghana", ""),
+                })
 
     # PUSH STATUS TO GITHUB
     top10 = sorted(all_results.items(), key=lambda x: abs(x[1]["combined"]), reverse=True)[:10]
@@ -2926,6 +3093,7 @@ def get_available_capital(exchange):
 
 def main():
     build_ai_providers()
+    _load_daily_loss_state()
     log("=" * 55)
     log("  ACCRA BOT v9 - MULTI-AI POWERHOUSE ENGINE")
     log(f"  Crypto:  ALL top coins {'[ON]' if BINANCE_KEY else '[NO KEY]'}")
@@ -2933,7 +3101,11 @@ def main():
     log(f"  HFM:     DISABLED")
     log(f"  Groq AI: {'ACTIVE' if GROQ_KEY else 'not set'}")
     log(f"  GitHub:  {'ACTIVE' if os.path.exists('.git') else 'not configured'}")
-    log(f"  Mode:    {'PAPER' if 'paper' in ALPACA_BASE else 'LIVE'}")
+    log(f"  Mode:    {'PAPER (PAPER_MODE=true)' if PAPER_MODE else 'LIVE'}")
+    if MAX_DAILY_LOSS_USD:
+        log(f"  DailyLoss: ${MAX_DAILY_LOSS_USD:.2f} limit | today so far: ${_daily_realized_pnl_usd:+.2f}")
+    else:
+        log("  DailyLoss: disabled")
     log(f"  Interval:{SLEEP_SECS}s")
     build_ai_providers()
     log("=" * 55)
