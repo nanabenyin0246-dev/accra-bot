@@ -2170,20 +2170,28 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                 min_notional = _lot["min_notional"]
                 if amount < min_notional:
                     if tier in ("FLASH", "PRIORITY"):
-                        if min_notional > bal * 0.95:
-                            log(f"  SKIP {symbol}: {tier} but can't afford minNotional"
-                                f" ${min_notional:.2f} (avail ${bal*0.95:.2f})")
+                        import math as _math
+                        step = _lot["step"]
+                        qty  = _math.ceil(min_notional / price / step) * step
+                        qty  = round(qty, prec)
+                        bumped_cost = round(qty * price, 4)
+                        if bumped_cost > bal * 0.95:
+                            log(f"  SKIP {symbol}: {tier} but can't afford min qty"
+                                f" ${bumped_cost:.2f} (avail ${bal*0.95:.2f})")
                             return False
-                        log(f"  [FLOOR] {symbol}: ${amount:.2f} < minNotional ${min_notional:.2f}"
-                            f" — bumped to floor [{tier}]")
-                        amount = min_notional * 1.02
+                        log(f"  [FLOOR] {symbol}: ceiled qty={qty}"
+                            f" (${bumped_cost:.2f} >= minNotional ${min_notional:.2f}) [{tier}]")
+                        amount = bumped_cost
+                        if prec == 0:
+                            qty = int(qty)
                     else:
                         log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional"
                             f" ${min_notional:.2f} [{tier}]")
                         return False
-                qty = round(amount / price, prec)
-                if prec == 0:
-                    qty = int(qty)
+                else:
+                    qty = round(amount / price, prec)
+                    if prec == 0:
+                        qty = int(qty)
                 order = place_crypto_order(symbol, "BUY", qty)
                 log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 register_trade(symbol, price, cfg, "crypto", size_usd=amount)
