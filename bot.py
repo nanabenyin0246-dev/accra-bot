@@ -2176,7 +2176,7 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                             return False
                         log(f"  [FLOOR] {symbol}: ${amount:.2f} < minNotional ${min_notional:.2f}"
                             f" — bumped to floor [{tier}]")
-                        amount = min_notional
+                        amount = min_notional * 1.02
                     else:
                         log(f"  SKIP {symbol}: buy amount ${amount:.2f} < min notional"
                             f" ${min_notional:.2f} [{tier}]")
@@ -2631,6 +2631,7 @@ def run_cycle():
     # RANK SIGNALS
     min_conf = strategy.get("min_confidence", 35)
     max_open = min(strategy.get("max_open_trades", 5), MAX_OPEN_POSITIONS)
+    crypto_open = sum(1 for t in open_trades.values() if t.get("market") == "crypto")
 
     buys = []
     for s, r in all_results.items():
@@ -2670,11 +2671,11 @@ def run_cycle():
                 "pnl_pct": _pnl_pct, "pnl_usd": _pnl_usd,
             })
 
-    slots = max_open - len(open_trades)
+    slots = max_open - crypto_open
     if check_daily_loss_limit():
         log(f"  [DAILY LOSS] Skipping {len(buys)} BUY signal(s) — kill switch active")
     elif slots <= 0:
-        log(f"  [POS CAP] {len(open_trades)}/{max_open} positions open — skipping {len(buys)} new BUY(s)")
+        log(f"  [POS CAP] {crypto_open}/{max_open} crypto positions open — skipping {len(buys)} new BUY(s)")
     else:
         for sym, sig in buys[:max(1, slots)]:
             log(f"\n  BUY: {sym} | Score:{sig['combined']:+d} | {sig['market'].upper()}")
