@@ -855,6 +855,7 @@ def place_crypto_order(symbol, side, quantity):
             "type": "MARKET", "status": "FILLED",
             "executedQty": str(quantity),
             "origQty": str(quantity),
+            "cummulativeQuoteQty": str(round(quantity * price, 8)),
             "price": "0.00000000",
         }
 
@@ -2193,11 +2194,16 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                     if prec == 0:
                         qty = int(qty)
                 order = place_crypto_order(symbol, "BUY", qty)
-                log(f"  BOUGHT {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
-                register_trade(symbol, price, cfg, "crypto", size_usd=amount)
+                actual_qty = float(order.get("executedQty", qty))
+                # cummulativeQuoteQty = real USDT spent (live Binance or paper sim)
+                actual_size_usd = round(
+                    float(order.get("cummulativeQuoteQty", actual_qty * price)), 4)
+                log(f"  BOUGHT {actual_qty} {coin} @ ${price:,.4f}"
+                    f" | filled=${actual_size_usd:.2f} | ID:{order.get('orderId')}")
+                register_trade(symbol, price, cfg, "crypto", size_usd=actual_size_usd)
                 telegram(
                     f"<b>CRYPTO BUY</b>\n{symbol} @ ${price:,.4f}\n"
-                    f"Qty:{qty} | ${amount:.2f}\nConf:{conf}% | "
+                    f"Qty:{actual_qty} | ${actual_size_usd:.2f}\nConf:{conf}% | "
                     f"SL:${price*(1-cfg['sl']):.4f} TP:${price*(1+cfg['tp']):.4f}"
                 )
                 return True
@@ -2210,8 +2216,10 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                     return False
                 min_notional = _lot["min_notional"]
                 if qty * price < min_notional:
-                    log(f"  SKIP {symbol}: notional ${qty*price:.2f} < min ${min_notional:.2f}")
-                    return False
+                    log(f"  [DUST] {symbol}: notional ${qty*price:.4f} < min ${min_notional:.2f}"
+                        f" — writing off, freeing position slot")
+                    open_trades.pop(symbol, None)
+                    return False  # False = not a real sale; caller checks open_trades to detect dust
                 order = place_crypto_order(symbol, "SELL", qty)
                 log(f"  SOLD {qty} {coin} @ ${price:,.4f} | ID:{order.get('orderId')}")
                 open_trades.pop(symbol, None)
@@ -2622,19 +2630,33 @@ def run_cycle():
         pnl_usd  = round(size_usd * pnl / 100, 4)
         sig_cfg  = all_results.get(sym, {}).get("cfg", {**cfg, "pct": 5})
         log(f"\n  AUTO-CLOSE {sym}: {reason} | PnL:{pnl:+.2f}% (≈${pnl_usd:+.2f})")
-        execute(sym, "SELL", price, sig_cfg, 0, market)
-        _daily_realized_pnl_usd += pnl_usd
-        _save_daily_loss_state()
-        telegram(
-            f"<b>AUTO-CLOSE</b>\n{sym}\n{reason}\n"
-            f"Entry:{entry:.4f} Exit:{price:.4f}\nPnL:{pnl:+.2f}%"
-        )
-        log_trade({
-            "time": datetime.now().isoformat(), "symbol": sym,
-            "action": "CLOSE", "reason": reason,
-            "entry": entry, "exit": price, "pnl": pnl,
-            "pnl_usd": pnl_usd, "market": market,
-        })
+        _was_open = sym in open_trades
+        sold = execute(sym, "SELL", price, sig_cfg, 0, market)
+        _freed = _was_open and sym not in open_trades  # True for both real sell and dust write-off
+        if not _freed:
+            # execute() failed and position is still tracked — will retry next cycle
+            continue
+        if sold:
+            # Real sale executed — update P&L and notify
+            _daily_realized_pnl_usd += pnl_usd
+            _save_daily_loss_state()
+            telegram(
+                f"<b>AUTO-CLOSE</b>\n{sym}\n{reason}\n"
+                f"Entry:{entry:.4f} Exit:{price:.4f}\nPnL:{pnl:+.2f}%"
+            )
+            log_trade({
+                "time": datetime.now().isoformat(), "symbol": sym,
+                "action": "CLOSE", "reason": reason,
+                "entry": entry, "exit": price, "pnl": pnl,
+                "pnl_usd": pnl_usd, "market": market,
+            })
+        else:
+            # Dust write-off — position freed but no real sale, P&L not counted
+            log_trade({
+                "time": datetime.now().isoformat(), "symbol": sym,
+                "action": "DUST_WRITEOFF", "reason": reason,
+                "entry": entry, "market": market, "pnl": 0, "pnl_usd": 0,
+            })
 
     # RANK SIGNALS
     min_conf = strategy.get("min_confidence", 35)
