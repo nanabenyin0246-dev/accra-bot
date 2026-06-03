@@ -474,6 +474,7 @@ SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 PAPER_MODE     = os.getenv("PAPER_MODE", "true").lower() not in ("false", "0", "no")
 _raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
 MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
+log(f"  [DIAG] MAX_DAILY_LOSS_USD raw={repr(_raw_mdl)} resolved={MAX_DAILY_LOSS_USD!r}")
 MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 LOG_FILE       = "trade_log.json"
 DAILY_LOSS_FILE = "daily_loss_state.json"
@@ -2428,7 +2429,10 @@ def _load_daily_loss_state():
         with open(DAILY_LOSS_FILE) as f:
             state = json.load(f)
         ws = datetime.fromisoformat(state["window_start"])
-        if (datetime.now() - ws).total_seconds() < 86400:
+        age_hours = (datetime.now() - ws).total_seconds() / 3600
+        log(f"  [DIAG] daily_loss_state.json: pnl_usd={state.get('pnl_usd')}"
+            f" window_start={state['window_start']} age={age_hours:.2f}h")
+        if age_hours * 3600 < 86400:
             _daily_realized_pnl_usd = float(state.get("pnl_usd", 0.0))
             _daily_pnl_window_start = ws
             log(f"  [DAILY LOSS] Resumed: pnl=${_daily_realized_pnl_usd:+.2f}"
