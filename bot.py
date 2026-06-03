@@ -1,5 +1,5 @@
 import os, time, json, hmac, hashlib, requests, logging, re
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 logging.basicConfig(filename="bot.log", level=logging.INFO,
@@ -530,7 +530,7 @@ cycle_count = 0
 _lot_size_cache = {}   # symbol -> {"step": float, "decimals": int, "min_notional": float}
 _paper_fills = []      # paper-mode simulated fills
 _daily_realized_pnl_usd = 0.0
-_daily_pnl_window_start = None
+_daily_pnl_date = None          # UTC calendar date (datetime.date) for current window
 _daily_loss_blocked = False
 
 # ============================================================
@@ -2411,54 +2411,55 @@ def activate_failsafe(reason):
 
 
 def _save_daily_loss_state():
-    """Write running P&L total and window start to disk so a restart can resume them."""
+    """Write running P&L total and UTC calendar date to disk so a restart can resume them."""
     try:
+        today = datetime.now(timezone.utc).date()
         with open(DAILY_LOSS_FILE, "w") as f:
             json.dump({
                 "pnl_usd": _daily_realized_pnl_usd,
-                "window_start": (_daily_pnl_window_start or datetime.now()).isoformat(),
+                "date": (_daily_pnl_date or today).isoformat(),
             }, f)
     except Exception as e:
         log(f"  [DAILY LOSS] Save failed: {e}", "warning")
 
 
 def _load_daily_loss_state():
-    """Load persisted P&L state on startup; resets if the stored window is older than 24h."""
-    global _daily_realized_pnl_usd, _daily_pnl_window_start
+    """Load persisted P&L state on startup; resets if stored date != today (UTC)."""
+    global _daily_realized_pnl_usd, _daily_pnl_date
+    today = datetime.now(timezone.utc).date()
     try:
         with open(DAILY_LOSS_FILE) as f:
             state = json.load(f)
-        ws = datetime.fromisoformat(state["window_start"])
-        age_hours = (datetime.now() - ws).total_seconds() / 3600
+        stored_date_str = state.get("date") or state.get("window_start", "")[:10]
         log(f"  [DIAG] daily_loss_state.json: pnl_usd={state.get('pnl_usd')}"
-            f" window_start={state['window_start']} age={age_hours:.2f}h")
-        if age_hours * 3600 < 86400:
+            f" date={stored_date_str} today(UTC)={today.isoformat()}")
+        from datetime import date as _date
+        stored_date = _date.fromisoformat(stored_date_str)
+        if stored_date == today:
             _daily_realized_pnl_usd = float(state.get("pnl_usd", 0.0))
-            _daily_pnl_window_start = ws
-            log(f"  [DAILY LOSS] Resumed: pnl=${_daily_realized_pnl_usd:+.2f}"
-                f", window started {ws.strftime('%Y-%m-%d %H:%M')}")
+            _daily_pnl_date = today
+            log(f"  [DAILY LOSS] Resumed: pnl=${_daily_realized_pnl_usd:+.2f} (UTC date {today})")
         else:
-            _daily_pnl_window_start = datetime.now()
-            log("  [DAILY LOSS] Previous window expired — starting fresh")
+            _daily_pnl_date = today
+            log(f"  [DAILY LOSS] Stored date {stored_date} != today {today} — starting fresh")
     except FileNotFoundError:
-        pass
+        _daily_pnl_date = today
     except Exception as e:
         log(f"  [DAILY LOSS] Load failed: {e}", "warning")
+        _daily_pnl_date = today
 
 
 def check_daily_loss_limit():
-    """Returns True and blocks new BUY entries if the 24h realized loss hit MAX_DAILY_LOSS_USD."""
-    global _daily_realized_pnl_usd, _daily_pnl_window_start, _daily_loss_blocked
+    """Returns True and blocks new BUY entries if today's (UTC) realized loss hit MAX_DAILY_LOSS_USD."""
+    global _daily_realized_pnl_usd, _daily_pnl_date, _daily_loss_blocked
     if MAX_DAILY_LOSS_USD is None:
         return False
-    now = datetime.now()
-    if _daily_pnl_window_start is None:
-        _daily_pnl_window_start = now
-    if (now - _daily_pnl_window_start).total_seconds() >= 86400:
+    today = datetime.now(timezone.utc).date()
+    if _daily_pnl_date != today:
         _daily_realized_pnl_usd = 0.0
-        _daily_pnl_window_start = now
         _daily_loss_blocked = False
-        log("  [DAILY LOSS] 24h window reset — kill switch cleared")
+        _daily_pnl_date = today
+        log(f"  [DAILY LOSS] New UTC day ({today}) — counter reset, kill switch cleared")
         _save_daily_loss_state()
     if -_daily_realized_pnl_usd >= MAX_DAILY_LOSS_USD:
         if not _daily_loss_blocked:
