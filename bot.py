@@ -570,7 +570,7 @@ def build_ai_providers():
             "model":"deepseek-chat","headers":{"Authorization":f"Bearer {DEEPSEEK_KEY}","Content-Type":"application/json"},"max_tokens":300})
     log(f"  AI Providers: {[p['name'] for p in AI_PROVIDERS]}")
 
-def call_multi_ai(prompt, system="Return valid JSON only."):
+def call_multi_ai(prompt, system="Return valid JSON only.", max_tokens=None):
     global _ai_usage
     if not AI_PROVIDERS:
         return None
@@ -579,10 +579,11 @@ def call_multi_ai(prompt, system="Return valid JSON only."):
     for attempt in range(len(AI_PROVIDERS)):
         p = AI_PROVIDERS[(idx+attempt) % len(AI_PROVIDERS)]
         name = p["name"]
+        _mt = max_tokens if max_tokens is not None else p["max_tokens"]
         try:
             if p.get("gemini"):
                 body = {"contents":[{"parts":[{"text":f"{system}\n\n{prompt}"}]}],
-                        "generationConfig":{"maxOutputTokens":p["max_tokens"],"temperature":0.1}}
+                        "generationConfig":{"maxOutputTokens":_mt,"temperature":0.1}}
                 r = requests.post(p["url"],headers=p["headers"],json=body,timeout=20)
                 if r.ok:
                     text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -598,7 +599,7 @@ def call_multi_ai(prompt, system="Return valid JSON only."):
                     return text
                 raise Exception(f"HTTP {r.status_code}: {r.text[:50]}")
             else:
-                body = {"model":p["model"],"max_tokens":p["max_tokens"],"temperature":0.1,
+                body = {"model":p["model"],"max_tokens":_mt,"temperature":0.1,
                         "messages":[{"role":"system","content":system},{"role":"user","content":prompt}]}
                 r = requests.post(p["url"],headers=p["headers"],json=body,timeout=20)
                 rj = r.json()
@@ -2335,10 +2336,23 @@ def get_ai_autonomous_strategy(current_strategy):
         return activate_failsafe("No AI key configured")
     
     try:
-        raw = call_multi_ai(prompt, "Autonomous trading AI. Return valid JSON only. Focus on maximum profit.")
+        raw = call_multi_ai(prompt, "Autonomous trading AI. Return valid JSON only. Focus on maximum profit.", max_tokens=1024)
         if not raw:
             raise Exception("All AI providers failed")
-        parsed = json.loads(raw)
+        # Strip markdown fences, then extract outermost JSON object
+        raw = re.sub(r"```json|```", "", raw).strip()
+        _s, _e = raw.find('{'), raw.rfind('}')
+        if _s == -1 or _e <= _s:
+            log(f"  [AI Strategy] No JSON object in response. len={len(raw)}"
+                f" head={raw[:80]!r} tail={raw[-80:]!r}", "warning")
+            raise Exception(f"No JSON object found (len={len(raw)})")
+        raw = raw[_s:_e + 1]
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as _je:
+            log(f"  [AI Strategy] JSON parse error: {_je}."
+                f" len={len(raw)} head={raw[:80]!r} tail={raw[-80:]!r}", "warning")
+            raise
         
         # Merge with defaults
         new_strategy = {**current_strategy, **parsed,
@@ -3126,8 +3140,9 @@ def main():
     log(f"  Crypto:  ALL top coins {'[ON]' if BINANCE_KEY else '[NO KEY]'}")
     log(f"  Stocks:  DISABLED")
     log(f"  HFM:     DISABLED")
-    log(f"  Groq AI: {'ACTIVE' if GROQ_KEY else 'not set'}")
-    log(f"  GitHub:  {'ACTIVE' if os.path.exists('.git') else 'not configured'}")
+    _ai_names = [p["name"] for p in AI_PROVIDERS]
+    log(f"  AI:      {', '.join(_ai_names) if _ai_names else 'none configured'}")
+    log(f"  GitHub:  {'ACTIVE' if GITHUB_TOKEN else 'not configured'}")
     log(f"  Mode:    {'PAPER (PAPER_MODE=true)' if PAPER_MODE else 'LIVE'}")
     if MAX_DAILY_LOSS_USD:
         log(f"  DailyLoss: ${MAX_DAILY_LOSS_USD:.2f} limit | today so far: ${_daily_realized_pnl_usd:+.2f}")
