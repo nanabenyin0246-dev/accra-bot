@@ -477,6 +477,7 @@ _raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
 MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
 log(f"  [DIAG] MAX_DAILY_LOSS_USD raw={repr(_raw_mdl)} resolved={MAX_DAILY_LOSS_USD!r}")
 MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
+POLY_ENABLED           = os.getenv("POLY_ENABLED", "false").lower() in ("true", "1", "yes")
 LOG_FILE       = "trade_log.json"
 DAILY_LOSS_FILE = "daily_loss_state.json"
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
@@ -2854,31 +2855,32 @@ def run_poly_cycle(all_results, current_prices):
     sym_kw={"BTCUSDT":["bitcoin","btc"],"ETHUSDT":["ethereum","eth"],
             "SOLUSDT":["solana","sol"],"XAUUSD":["gold","xau"],
             "USOIL":["oil","crude","brent"]}
-    bets=0
-    for sym,res in all_results.items():
-        if sym not in sym_kw or res.get("signal") not in ("BUY","SELL"): continue
-        if res.get("confidence",0)<45 or state["balance"]<2: continue
-        kws=sym_kw[sym]
-        rel=[m for m in mkts if any(k in m.get("question","").lower() for k in kws)
-             and any(d in m.get("question","").lower() for d in ["above","below","higher","lower","price","hit"])]
-        if not rel: continue
-        m=rel[0]; q=m.get("question","").lower()
-        bet=round(min(max(state["balance"]*0.02*(res["confidence"]/100),1.0),20.0),2)
-        try: yp=float(m.get("outcomePrices",["0.5"])[0])
-        except: yp=0.5
-        side="YES" if (res["signal"]=="BUY" and any(k in q for k in ["above","higher","rise","hit"])) else "NO"
-        ep=yp if side=="YES" else 1-yp
-        tid=hashlib.md5(f"{sym}{_t.time()}".encode()).hexdigest()[:8]
-        trade={"id":tid,"time":_dt.now().isoformat(),"symbol":sym,
-               "question":m.get("question","")[:60],"signal":res["signal"],
-               "side":side,"amount":bet,"entry":ep,"confidence":res["confidence"],
-               "status":"OPEN","pnl":0.0,"bot_price":res.get("price",0)}
-        state["balance"]-=bet
-        state["open_positions"][tid]=trade
-        state["trades"].append(trade)
-        print(f"  [POLY BET] {side} ${bet:.1f} | {m.get('question','')[:52]}")
-        bets+=1
-        if bets>=2: break
+    if POLY_ENABLED:
+        bets=0
+        for sym,res in all_results.items():
+            if sym not in sym_kw or res.get("signal") not in ("BUY","SELL"): continue
+            if res.get("confidence",0)<45 or state["balance"]<2: continue
+            kws=sym_kw[sym]
+            rel=[m for m in mkts if any(k in m.get("question","").lower() for k in kws)
+                 and any(d in m.get("question","").lower() for d in ["above","below","higher","lower","price","hit"])]
+            if not rel: continue
+            m=rel[0]; q=m.get("question","").lower()
+            bet=round(min(max(state["balance"]*0.02*(res["confidence"]/100),1.0),20.0),2)
+            try: yp=float(m.get("outcomePrices",["0.5"])[0])
+            except: yp=0.5
+            side="YES" if (res["signal"]=="BUY" and any(k in q for k in ["above","higher","rise","hit"])) else "NO"
+            ep=yp if side=="YES" else 1-yp
+            tid=hashlib.md5(f"{sym}{_t.time()}".encode()).hexdigest()[:8]
+            trade={"id":tid,"time":_dt.now().isoformat(),"symbol":sym,
+                   "question":m.get("question","")[:60],"signal":res["signal"],
+                   "side":side,"amount":bet,"entry":ep,"confidence":res["confidence"],
+                   "status":"OPEN","pnl":0.0,"bot_price":res.get("price",0)}
+            state["balance"]-=bet
+            state["open_positions"][tid]=trade
+            state["trades"].append(trade)
+            print(f"  [POLY BET] {side} ${bet:.1f} | {m.get('question','')[:52]}")
+            bets+=1
+            if bets>=2: break
     for tid,t in list(state["open_positions"].items()):
         age=(_dt.now()-_dt.fromisoformat(t["time"])).total_seconds()/3600
         if age<1: continue
