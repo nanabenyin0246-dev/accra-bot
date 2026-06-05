@@ -472,6 +472,7 @@ GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPO    = os.getenv("GITHUB_REPO", "nanabenyin0246-dev/accra-terminal")
 SLEEP_SECS     = int(os.getenv("SLEEP_SECS", "60"))
 PAPER_MODE     = os.getenv("PAPER_MODE", "true").lower() not in ("false", "0", "no")
+log(f"  [DIAG] PAPER_MODE env={repr(os.getenv('PAPER_MODE', '<unset>'))} resolved={PAPER_MODE}")
 _raw_mdl       = os.getenv("MAX_DAILY_LOSS_USD", "")
 MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
 log(f"  [DIAG] MAX_DAILY_LOSS_USD raw={repr(_raw_mdl)} resolved={MAX_DAILY_LOSS_USD!r}")
@@ -2071,15 +2072,29 @@ def register_trade(symbol, price, cfg, market, size_usd=0.0):
         f"SL:{open_trades[symbol]['sl']:.4f} TP:{open_trades[symbol]['tp']:.4f}")
 
 
-def check_trades(prices):
+def check_trades(prices, trail=0.03):
     to_close = []
     for sym, t in list(open_trades.items()):
         p = prices.get(sym)
         if not p:
-            continue
+            # Symbol dropped out of this cycle's scan — fetch current price directly
+            if t.get("market") == "crypto":
+                try:
+                    r = requests.get(
+                        f"https://api.binance.com/api/v3/ticker/price?symbol={sym}",
+                        timeout=5)
+                    p = float(r.json()["price"])
+                except Exception as _e:
+                    log(f"  [CHECK_TRADES] {sym}: direct price fetch failed ({_e})"
+                        f" — cannot evaluate SL/TP this cycle", "warning")
+                    continue
+            else:
+                log(f"  [CHECK_TRADES] {sym} ({t.get('market','?')}): not in prices"
+                    f" — cannot evaluate SL/TP this cycle", "warning")
+                continue
         if p > t["trail_high"]:
             t["trail_high"] = p
-            t["trail_sl"]   = p * (1 - cfg.get("trail", 0.03))
+            t["trail_sl"]   = p * (1 - trail)
         reason = None
         if p <= t["sl"]:
             reason = f"Stop-loss {p:.4f}"
@@ -2642,7 +2657,7 @@ def run_cycle():
                 log(f"  [{sym}] {e}", "warning")
 
     # SL/TP CHECK
-    to_close = check_trades(prices)
+    to_close = check_trades(prices, trail=cfg.get("trail", 0.03))
     for sym, reason, price, market, entry in to_close:
         pnl      = round((price - entry) / entry * 100, 2)
         size_usd = open_trades.get(sym, {}).get("size_usd", 0.0)
