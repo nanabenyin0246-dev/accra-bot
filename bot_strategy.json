@@ -1,7 +1,7 @@
 {
   "mode": "balanced",
   "min_confidence": 55,
-  "max_open_trades": 2,
+  "max_open_trades": 1,
   "crypto_enabled": true,
   "stocks_enabled": false,
   "hfm_enabled": false,

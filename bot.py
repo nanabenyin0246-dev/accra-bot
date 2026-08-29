@@ -480,6 +480,7 @@ MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 POLY_ENABLED           = os.getenv("POLY_ENABLED", "false").lower() in ("true", "1", "yes")
 LOG_FILE       = "trade_log.json"
 DAILY_LOSS_FILE = "daily_loss_state.json"
+STARTING_BALANCE_FILE = "starting_balance_state.json"
 INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
 DREAM_EVERY    = 20
 dream_counter  = 0
@@ -489,7 +490,7 @@ STRATEGY_FILE  = "bot_strategy.json"
 DEFAULT_STRATEGY = {
     "mode": "balanced",
     "min_confidence": 22,
-    "max_open_trades": 3,
+    "max_open_trades": 1,
     "crypto_enabled": True,
     "stocks_enabled": True,
     "hfm_enabled": False,
@@ -630,7 +631,7 @@ MAX_AI_FAILURES = 3  # Activate failsafe after 3 consecutive AI failures
 FAILSAFE_STRATEGY = {
     "mode": "conservative",
     "min_confidence": 60,    # Very high threshold
-    "max_open_trades": 2,    # Limit exposure
+    "max_open_trades": 1,    # Limit exposure
     "crypto_enabled": True,
     "stocks_enabled": True, # Disable stocks in failsafe
     "hfm_enabled": False,
@@ -2099,6 +2100,13 @@ def check_trades(prices, trail=0.03):
         reason = None
         if p <= t["sl"]:
             reason = f"Stop-loss {p:.4f}"
+        elif t.get("partial_tp_done"):
+            # Already took partial profit off this one — the remainder rides on
+            # the breakeven/trailing stop only. Don't let a stale TP level
+            # (set before the partial exit) force a full close on every cycle
+            # the price happens to still be above it.
+            if p <= t.get("trail_sl", 0):
+                reason = f"Trailing SL {p:.4f}"
         elif p >= t["tp"]:
             reason = f"Take-profit {p:.4f}"
         elif p <= t.get("trail_sl", 0):
@@ -2106,6 +2114,69 @@ def check_trades(prices, trail=0.03):
         if reason:
             to_close.append((sym, reason, p, t["market"], t["entry"]))
     return to_close
+
+
+def try_partial_take_profit(sym, t, price, fraction, trail=0.03):
+    """
+    On a first take-profit touch for a crypto position, sell `fraction` of the
+    held quantity and let the rest ride with the stop moved to breakeven.
+    Returns True if the partial exit executed (caller should NOT also run a
+    full close this cycle). Returns False if partial exit isn't safe/possible
+    (already done, not crypto, or the split would leave a leg below Binance's
+    minNotional) — caller should fall back to a full close.
+    """
+    import math
+    if t.get("market") != "crypto" or t.get("partial_tp_done"):
+        return False
+    coin = sym.replace("USDT", "")
+    try:
+        bal = get_crypto_balance(coin)
+    except Exception as e:
+        log(f"  [PARTIAL_TP] {sym}: balance fetch failed ({e}) — full exit instead", "warning")
+        return False
+    lot = get_lot_info(sym)
+    step, decimals, min_notional = lot["step"], lot["decimals"], lot["min_notional"]
+    sell_qty   = math.floor((bal * fraction) / step) * step
+    sell_qty   = round(sell_qty, decimals)
+    remain_qty = round(bal - sell_qty, decimals)
+    sell_value   = sell_qty * price
+    remain_value = remain_qty * price
+    if sell_qty <= 0 or sell_value < min_notional or remain_value < min_notional:
+        log(f"  [PARTIAL_TP] {sym}: split would strand dust "
+            f"(sell=${sell_value:.2f} remain=${remain_value:.2f} min=${min_notional:.2f})"
+            f" — full exit instead")
+        return False
+    try:
+        order = place_crypto_order(sym, "SELL", sell_qty)
+    except Exception as e:
+        log(f"  [PARTIAL_TP] {sym}: sell order failed ({e}) — full exit instead", "warning")
+        return False
+    actual_qty = float(order.get("executedQty", sell_qty))
+    proceeds   = float(order.get("cummulativeQuoteQty", actual_qty * price))
+    pnl_pct    = round((price - t["entry"]) / t["entry"] * 100, 2)
+    pnl_usd    = round(proceeds - (t["entry"] * actual_qty), 4)
+    log(f"  [PARTIAL_TP] {sym}: sold {actual_qty} ({fraction*100:.0f}%) @ ${price:,.4f}"
+        f" | proceeds=${proceeds:.2f} | PnL:{pnl_pct:+.2f}%"
+        f" | remainder SL->breakeven, still exposed to upside")
+    telegram(
+        f"<b>PARTIAL TAKE-PROFIT</b>\n{sym}\n"
+        f"Sold {fraction*100:.0f}% @ {price:.4f} | PnL:{pnl_pct:+.2f}%\n"
+        f"Remainder stop moved to breakeven"
+    )
+    log_trade({
+        "time": datetime.now().isoformat(), "symbol": sym,
+        "action": "PARTIAL_TP", "entry": t["entry"], "exit": price,
+        "pnl": pnl_pct, "pnl_usd": pnl_usd, "market": t["market"],
+    })
+    global _daily_realized_pnl_usd
+    _daily_realized_pnl_usd += pnl_usd
+    _save_daily_loss_state()
+    t["size_usd"]       = round(remain_value, 4)
+    t["sl"]             = t["entry"]                       # breakeven
+    t["partial_tp_done"] = True
+    t["trail_high"]     = max(t.get("trail_high", price), price)
+    t["trail_sl"]       = t["trail_high"] * (1 - trail)
+    return True
 
 
 def telegram(message):
@@ -2172,7 +2243,7 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                     fear_greed=_fg_cache.get("value", 50),
                     market_condition=cfg.get("market_condition", "neutral"),
                     current_balance=bal,
-                    starting_balance=6.0,
+                    starting_balance=get_or_init_starting_balance(bal),
                     consecutive_losses=0,
                     sl_multiplier=1.0,
                     tp_multiplier=_tp_ratio,
@@ -2440,6 +2511,30 @@ def activate_failsafe(reason):
     return FAILSAFE_STRATEGY.copy()
 
 
+def get_or_init_starting_balance(current_balance):
+    """
+    Returns the account's true starting balance, persisted once on first use
+    so position-sizing math (Kelly skew) always compares against the real
+    baseline instead of a number hand-typed months ago that goes stale as
+    the account grows or shrinks.
+    """
+    try:
+        with open(STARTING_BALANCE_FILE) as f:
+            state = json.load(f)
+        return float(state.get("starting_balance", current_balance))
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        try:
+            with open(STARTING_BALANCE_FILE, "w") as f:
+                json.dump({
+                    "starting_balance": current_balance,
+                    "set_at": datetime.now(timezone.utc).isoformat(),
+                }, f)
+            log(f"  [DIAG] starting_balance_state.json initialized at ${current_balance:.2f}")
+        except Exception as e:
+            log(f"  [STARTING BALANCE] Save failed: {e}", "warning")
+        return current_balance
+
+
 def _save_daily_loss_state():
     """Write running P&L total and UTC calendar date to disk so a restart can resume them."""
     try:
@@ -2660,6 +2755,14 @@ def run_cycle():
     # SL/TP CHECK
     to_close = check_trades(prices, trail=cfg.get("trail", 0.03))
     for sym, reason, price, market, entry in to_close:
+        if reason.startswith("Take-profit"):
+            t = open_trades.get(sym)
+            if t and try_partial_take_profit(
+                sym, t, price,
+                strategy.get("partial_tp_fraction", 0.75),
+                trail=cfg.get("trail", 0.03),
+            ):
+                continue  # remainder stays open with SL at breakeven; skip full close
         pnl      = round((price - entry) / entry * 100, 2)
         size_usd = open_trades.get(sym, {}).get("size_usd", 0.0)
         pnl_usd  = round(size_usd * pnl / 100, 4)
