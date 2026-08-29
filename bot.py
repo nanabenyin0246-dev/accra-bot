@@ -478,10 +478,12 @@ MAX_DAILY_LOSS_USD     = float(_raw_mdl) if _raw_mdl else None
 log(f"  [DIAG] MAX_DAILY_LOSS_USD raw={repr(_raw_mdl)} resolved={MAX_DAILY_LOSS_USD!r}")
 MAX_OPEN_POSITIONS     = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 POLY_ENABLED           = os.getenv("POLY_ENABLED", "false").lower() in ("true", "1", "yes")
-LOG_FILE       = "trade_log.json"
-DAILY_LOSS_FILE = "daily_loss_state.json"
-STARTING_BALANCE_FILE = "starting_balance_state.json"
-INSIGHTS_FILE  = os.path.expanduser("~/accra-bot/dream_insights.json")
+_VOLUME_PATH = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", ".")  # e.g. "/data" on Railway
+LOG_FILE       = os.path.join(_VOLUME_PATH, "trade_log.json")
+DAILY_LOSS_FILE = os.path.join(_VOLUME_PATH, "daily_loss_state.json")
+STARTING_BALANCE_FILE = os.path.join(_VOLUME_PATH, "starting_balance_state.json")
+OPEN_TRADES_FILE = os.path.join(_VOLUME_PATH, "open_trades_state.json")
+INSIGHTS_FILE  = os.path.join(_VOLUME_PATH, "dream_insights.json")
 DREAM_EVERY    = 20
 dream_counter  = 0
 STATUS_FILE    = "bot_status.json"
@@ -2047,8 +2049,8 @@ def run_dream_cycle():
     try:
         with open(INSIGHTS_FILE, "w") as f:
             json.dump(insights, f, indent=2)
-    except:
-        pass
+    except Exception as e:
+        log(f"  [DREAM] Insights save failed: {e}", "warning")
 
     log("  [DREAM] win_rate=%.0f%% streak=%d avoid=%s best=%s" % (
         win_rate*100, streak, directives["avoid_asset"], best))
@@ -2058,6 +2060,37 @@ def run_dream_cycle():
             streak, directives["avoid_asset"]))
 
     return insights
+
+def save_open_trades():
+    """
+    Persist open_trades to disk so a Railway restart doesn't silently drop
+    SL/TP tracking on a position that's still actually held. Called once
+    per cycle from the main loop rather than on every individual mutation --
+    cheap, and the worst case on a mid-cycle crash is losing a few seconds
+    of state, not the whole position.
+    """
+    try:
+        with open(OPEN_TRADES_FILE, "w") as f:
+            json.dump(open_trades, f)
+    except Exception as e:
+        log(f"  [OPEN_TRADES] Save failed: {e}", "warning")
+
+
+def load_open_trades():
+    """Restore open_trades from disk on startup, if a prior run left any."""
+    global open_trades
+    try:
+        with open(OPEN_TRADES_FILE) as f:
+            restored = json.load(f)
+        open_trades.update(restored)
+        if restored:
+            log(f"  [OPEN_TRADES] Restored {len(restored)} position(s) from disk: "
+                f"{', '.join(restored.keys())}")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  [OPEN_TRADES] Load failed: {e}", "warning")
+
 
 def register_trade(symbol, price, cfg, market, size_usd=0.0):
     open_trades[symbol] = {
@@ -3305,7 +3338,7 @@ def liquidate_all_to_usdt():
             log(f"  [RESET] {asset} sell failed: {e}", "warning")
 
     open_trades.clear()
-    for f in (DAILY_LOSS_FILE, STARTING_BALANCE_FILE):
+    for f in (DAILY_LOSS_FILE, STARTING_BALANCE_FILE, OPEN_TRADES_FILE):
         try:
             os.remove(f)
         except FileNotFoundError:
@@ -3328,6 +3361,7 @@ def liquidate_all_to_usdt():
 def main():
     build_ai_providers()
     _load_daily_loss_state()
+    load_open_trades()
     if os.getenv("LIQUIDATE_AND_RESET", "").lower() in ("1", "true", "yes"):
         liquidate_all_to_usdt()
     log("=" * 55)
@@ -3407,6 +3441,7 @@ def main():
             if "418" in str(e):
                 log("  [BAN] 418 - sleeping 10 min", "error")
                 time.sleep(600)
+        save_open_trades()
         # ── Dream cycle ──────────────────────────────────
         global dream_counter
         dream_counter += 1
