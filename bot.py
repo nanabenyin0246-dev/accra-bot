@@ -3252,9 +3252,84 @@ def get_available_capital(exchange):
         log(f"  [CAPITAL] {str(e)[:40]}", "warning")
         return 0, {}, 0
 
+def liquidate_all_to_usdt():
+    """
+    One-time reset: sell every non-USDT crypto asset currently held in the
+    Binance account back to USDT, then clear in-memory trade tracking and
+    the persisted sizing/loss state so the bot starts genuinely fresh under
+    the new max_open_trades=1 / partial-TP logic. Scans real account
+    balances rather than the in-memory open_trades dict, since that dict is
+    never persisted and would miss anything orphaned by a prior restart.
+    Only runs when the LIQUIDATE_AND_RESET env var is set.
+    """
+    log("  [RESET] LIQUIDATE_AND_RESET is set — selling all non-USDT crypto holdings...")
+    telegram("<b>RESET STARTED</b>\nLiquidating all crypto holdings to USDT.")
+    try:
+        ts = binance_time()
+        r = requests.get(
+            f"https://api.binance.com/api/v3/account?{sign_binance({'timestamp': ts})}",
+            headers=binance_headers(), timeout=10)
+        r.raise_for_status()
+        balances = r.json()["balances"]
+    except Exception as e:
+        log(f"  [RESET] Failed to fetch account balances: {e}", "error")
+        telegram(f"<b>RESET FAILED</b>\nCouldn't fetch balances: {e}")
+        return
+
+    sold, skipped = [], []
+    for b in balances:
+        asset = b["asset"]
+        free  = float(b["free"])
+        if asset == "USDT" or free <= 0:
+            continue
+        symbol = f"{asset}USDT"
+        try:
+            price = float(requests.get(
+                f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
+                timeout=5).json()["price"])
+        except Exception:
+            skipped.append(f"{asset} (no direct USDT pair — needs manual handling)")
+            continue
+        lot   = get_lot_info(symbol)
+        value = free * price
+        if value < lot["min_notional"]:
+            skipped.append(f"{asset} (${value:.2f} below ${lot['min_notional']:.2f} min — dust)")
+            continue
+        try:
+            order    = place_crypto_order(symbol, "SELL", free)
+            proceeds = float(order.get("cummulativeQuoteQty", value))
+            sold.append(f"{asset}: ${proceeds:.2f}")
+            log(f"  [RESET] Sold {asset} -> ${proceeds:.2f} USDT")
+        except Exception as e:
+            skipped.append(f"{asset} (sell failed: {e})")
+            log(f"  [RESET] {asset} sell failed: {e}", "warning")
+
+    open_trades.clear()
+    for f in (DAILY_LOSS_FILE, STARTING_BALANCE_FILE):
+        try:
+            os.remove(f)
+        except FileNotFoundError:
+            pass
+
+    summary = (
+        f"RESET COMPLETE\n"
+        f"Sold: {', '.join(sold) if sold else 'nothing'}\n"
+        f"Skipped: {', '.join(skipped) if skipped else 'nothing'}\n"
+        f"Trade tracking + sizing baseline cleared.\n"
+        f"IMPORTANT: remove LIQUIDATE_AND_RESET from Railway variables now,"
+        f" or the next restart will try to liquidate again."
+    )
+    log(f"  [RESET] {summary}")
+    telegram(f"<b>RESET COMPLETE</b>\nSold: {', '.join(sold) if sold else 'nothing'}\n"
+             f"Skipped: {', '.join(skipped) if skipped else 'nothing'}\n"
+             f"Remove LIQUIDATE_AND_RESET from Railway variables now.")
+
+
 def main():
     build_ai_providers()
     _load_daily_loss_state()
+    if os.getenv("LIQUIDATE_AND_RESET", "").lower() in ("1", "true", "yes"):
+        liquidate_all_to_usdt()
     log("=" * 55)
     log("  ACCRA BOT v9 - MULTI-AI POWERHOUSE ENGINE")
     log(f"  Crypto:  ALL top coins {'[ON]' if BINANCE_KEY else '[NO KEY]'}")
