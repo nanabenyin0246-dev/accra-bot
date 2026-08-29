@@ -602,7 +602,7 @@ def call_multi_ai(prompt, system="Return valid JSON only.", max_tokens=None):
                     _ai_usage[name] = _ai_usage.get(name,0)+1
                     log(f"  [AI:{name}] OK")
                     return text
-                raise Exception(f"HTTP {r.status_code}: {r.text[:50]}")
+                raise Exception(f"HTTP {r.status_code}: {r.text[:300]}")
             else:
                 body = {"model":p["model"],"max_tokens":_mt,"temperature":0.1,
                         "messages":[{"role":"system","content":system},{"role":"user","content":prompt}]}
@@ -616,7 +616,7 @@ def call_multi_ai(prompt, system="Return valid JSON only.", max_tokens=None):
                 log(f"  [AI:{name}] OK G:{_ai_usage.get('groq',0)} Gem:{_ai_usage.get('gemini',0)} OR:{_ai_usage.get('openrouter',0)}")
                 return text
         except Exception as e:
-            log(f"  [AI:{name}] Failed:{str(e)[:60]} trying next...","warning")
+            log(f"  [AI:{name}] Failed:{str(e)[:300]} trying next...","warning")
     log("  [AI] All providers failed - using rule-based fallback","warning")
     # Crucix-inspired: rule-based engine takes over when LLM unavailable
     # This ensures AI failures never crash the trading cycle
