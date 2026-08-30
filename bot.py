@@ -626,6 +626,8 @@ def call_multi_ai(prompt, system="Return valid JSON only.", max_tokens=None):
 ai_strategy_cycle = 0
 AI_STRATEGY_INTERVAL = 5  # Run AI strategy every 5 cycles
 ai_mode_enabled = True     # Can be toggled from terminal
+trading_paused  = False    # Can be toggled from terminal - blocks new BUYs only
+TERMINAL_OVERRIDE_TTL_HOURS = 24  # ignore overrides older than this (stale-safety)
 failsafe_active = False
 failsafe_reason = ""
 ai_consecutive_failures = 0
@@ -675,6 +677,64 @@ def get_risk(strategy):
 
 
 GIST_ID = "4f5f6918288ddaec0a1fc998af3e6f99"
+
+def get_terminal_override():
+    """
+    Reads an optional 'terminal_override.json' file from the shared Gist so
+    a human operator using Accra Terminal can actually influence live
+    trading, not just view a status snapshot. This is a new trust boundary
+    (external input reaching a live-money bot), so every field is
+    strictly whitelisted and range-checked rather than trusted as-is, and
+    the whole override is ignored if it's missing a timestamp or older
+    than TERMINAL_OVERRIDE_TTL_HOURS -- a forgotten pause from days ago
+    should not silently keep controlling the account.
+
+    Contract (what Accra Terminal should write to the Gist file
+    'terminal_override.json'):
+        {
+          "set_at": "<ISO-8601 UTC timestamp, e.g. 2026-08-30T10:00:00Z>",
+          "trading_paused": true | false,        # optional
+          "ai_mode_enabled": true | false,        # optional
+          "mode": "conservative"|"balanced"|"aggressive"  # optional
+        }
+    Any field omitted is left untouched (falls through to AI/default).
+    """
+    try:
+        r = requests.get(f"https://api.github.com/gists/{GIST_ID}",
+                          headers={"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {},
+                          timeout=10)
+        r.raise_for_status()
+        f = r.json().get("files", {}).get("terminal_override.json")
+        if not f or not f.get("content"):
+            return {}
+        data = json.loads(f["content"])
+    except Exception as e:
+        log(f"  [TERMINAL] Override read failed: {e}", "warning")
+        return {}
+
+    set_at = data.get("set_at")
+    if not set_at:
+        return {}  # no timestamp = don't trust it
+    try:
+        ts = datetime.fromisoformat(str(set_at).replace("Z", "+00:00"))
+        age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+    except Exception:
+        return {}
+    if age_h > TERMINAL_OVERRIDE_TTL_HOURS or age_h < 0:
+        log(f"  [TERMINAL] Override is {age_h:.1f}h old - ignoring as stale/invalid", "warning")
+        return {}
+
+    out = {}
+    if isinstance(data.get("trading_paused"), bool):
+        out["trading_paused"] = data["trading_paused"]
+    if isinstance(data.get("ai_mode_enabled"), bool):
+        out["ai_mode_enabled"] = data["ai_mode_enabled"]
+    if data.get("mode") in ("conservative", "balanced", "aggressive"):
+        out["mode"] = data["mode"]
+    if out:
+        log(f"  [TERMINAL] Active override ({age_h:.1f}h old): {out}")
+    return out
+
 
 def push_status(data):
     try:
@@ -2241,6 +2301,9 @@ def log_trade(entry):
 
 
 def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
+    if signal == "BUY" and trading_paused:
+        log(f"  [TERMINAL] Trading paused by operator - skipping BUY {symbol}")
+        return False
     # Check dream directives
     _ins = load_insights()
     if _ins:
@@ -2659,9 +2722,24 @@ def run_cycle():
     except Exception as _e:
         import traceback
         log(f"  [ASSET MODE] ERROR: {traceback.format_exc()[:200]}", "warning")
-    global ai_strategy_cycle
+    global ai_strategy_cycle, ai_mode_enabled, trading_paused
     ts       = datetime.now().strftime("%H:%M:%S")
     strategy = load_strategy()
+
+    # Terminal read-back: a human operator can pause trading or pin a mode
+    # via Accra Terminal. Whitelisted/TTL-checked inside get_terminal_override.
+    term = get_terminal_override()
+    if "trading_paused" in term:
+        if term["trading_paused"] != trading_paused:
+            log(f"  [TERMINAL] trading_paused -> {term['trading_paused']}")
+            telegram(f"<b>TERMINAL OVERRIDE</b>\nTrading {'PAUSED' if term['trading_paused'] else 'RESUMED'} by operator")
+        trading_paused = term["trading_paused"]
+    if "ai_mode_enabled" in term:
+        ai_mode_enabled = term["ai_mode_enabled"]
+    if "mode" in term:
+        strategy["mode"] = term["mode"]
+        strategy["updated_by"] = "terminal_override"
+
     try:
         log_intel_summary()
     except:pass
@@ -2689,7 +2767,7 @@ def run_cycle():
     cfg      = get_risk(strategy)
 
     log(f"\n{'='*55}")
-    status_tag = "FAILSAFE" if failsafe_active else ("AI-AUTO" if ai_mode_enabled else "MANUAL")
+    status_tag = "PAUSED" if trading_paused else ("FAILSAFE" if failsafe_active else ("AI-AUTO" if ai_mode_enabled else "MANUAL"))
     log(f"[{ts}] ACCRA BOT v9 | {status_tag} | Mode:{mode} | Cycle:{cycle_count}")
     log(f"{'='*55}")
 
