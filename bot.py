@@ -555,8 +555,8 @@ def build_ai_providers():
             "model":"llama-3.3-70b-versatile","headers":{"Authorization":f"Bearer {GROQ_KEY}","Content-Type":"application/json"},"max_tokens":300})
     if GEMINI_KEY:
         AI_PROVIDERS.append({"name":"gemini",
-            "url":f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}",
-            "model":"gemini-2.5-flash","headers":{"Content-Type":"application/json"},"max_tokens":300,"gemini":True})
+            "url":f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_KEY}",
+            "model":"gemini-3.6-flash","headers":{"Content-Type":"application/json"},"max_tokens":300,"gemini":True})
     if OPENROUTER_KEY:
         AI_PROVIDERS.append({"name":"openrouter","url":"https://openrouter.ai/api/v1/chat/completions",
             "model":"meta-llama/llama-3.3-70b-instruct:free","headers":{"Authorization":f"Bearer {OPENROUTER_KEY}","Content-Type":"application/json"},"max_tokens":300})
