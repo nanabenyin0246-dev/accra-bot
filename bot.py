@@ -1,4 +1,4 @@
-import os, time, json, hmac, hashlib, requests, logging, re
+import os, time, json, hmac, hashlib, requests, logging, re, subprocess
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -32,15 +32,17 @@ def hl_trade(signal, coin="SOL", pct=0.2):
         log("[HL] Trade error: %s" % e)
 
 # ── TRADE.XYZ ────────────────────────────────────────────
-try:
-    pass  # xyz disabled - resumes when Binance hits $100
-    XYZ_ENABLED = True
-except Exception as _xyz_err:
-    XYZ_ENABLED = False
-try:
-    import eth_account
-except ImportError:
-    XYZ_ENABLED = False
+# STUB / UNIMPLEMENTED: tradexyz_trader.py's functions are all placeholders
+# (xyz_get_balance always returns 0.0, xyz_close_position is a no-op, and
+# xyz_place_order doesn't exist there at all). The XYZ trade paths below
+# call xyz_place_order/xyz_close_position directly, which would raise
+# NameError if ever reached. This was previously only disabled by accident
+# (eth_account isn't in requirements.txt, so the import failed and set
+# XYZ_ENABLED = False) rather than by design. Disabling explicitly instead
+# of relying on that accident. Re-enable only once tradexyz_trader.py has
+# a real implementation and xyz_place_order/xyz_close_position are
+# actually imported below.
+XYZ_ENABLED = False
 
 
 # Stub xyz functions - always defined, overridden if import succeeds
@@ -1155,6 +1157,7 @@ def trade_existing_assets(strategy, cfg):
                     order = place_crypto_order(worst["symbol"], "SELL", sell_qty)
                     proceeds = float(order.get("cummulativeQuoteQty", 0))
                     log(f"  [ASSET TRADE] SOLD {worst['asset']} -> ${proceeds:.2f} USDT")
+                    open_trades.pop(worst["symbol"], None)
                     time.sleep(1)
                     if proceeds >= 2:
                         buy_amount = round(proceeds * 0.95, 2)
@@ -1163,6 +1166,8 @@ def trade_existing_assets(strategy, cfg):
                             buy_qty = int(buy_qty)
                         if buy_qty * best["price"] >= 2:
                             buy_order = place_crypto_order(best["symbol"], "BUY", buy_qty)
+                            fill_price = float(buy_order.get("cummulativeQuoteQty", buy_amount)) / buy_qty if buy_qty else best["price"]
+                            register_trade(best["symbol"], fill_price, cfg, "crypto", size_usd=buy_amount)
                             log(f"  [ASSET TRADE] BOUGHT {buy_qty} {best['asset']} @ ${best['price']:.4f}")
                             telegram(f"<b>ASSET ROTATION</b>\nSOLD {worst['asset']} (score:{worst['score']})\nBOUGHT {best['asset']} (score:{best['score']})\nAmount: ${proceeds:.2f}")
                             return
@@ -1191,6 +1196,7 @@ def trade_existing_assets(strategy, cfg):
                         order = place_crypto_order(sym, "SELL", qty)
                         proceeds = float(order.get("cummulativeQuoteQty", 0))
                         log(f"  [ASSET TRADE] SOLD {qty} {t['asset']} -> ${proceeds:.2f} USDT | {sell_reason}")
+                        open_trades.pop(sym, None)
                         telegram(f"<b>ASSET SELL</b>\nSOLD {t['asset']} -> ${proceeds:.2f} USDT\nReason: {sell_reason}")
             except Exception as e:
                 log(f"  [ASSET TRADE] Error {sym}: {e}", "warning")
@@ -2647,7 +2653,7 @@ def run_cycle():
         if _usdt < 6:
             log(f"  [ASSET MODE] LOW USDT - activating asset trading!")
             strategy_now = load_strategy()
-            trade_existing_assets(strategy_now, {})
+            trade_existing_assets(strategy_now, get_risk(strategy_now))
         else:
             log(f"  [ASSET MODE] USDT OK - normal trading mode")
     except Exception as _e:
@@ -2665,7 +2671,7 @@ def run_cycle():
         usdt_now = get_crypto_balance("USDT")
         if usdt_now < 4:
             log(f"  [ASSET TRADE] USDT=${usdt_now:.2f} - activating asset trading mode...")
-            trade_existing_assets(strategy, {})
+            trade_existing_assets(strategy, get_risk(strategy))
     except Exception as e:
         log(f"  [ASSET TRADE] Error: {e}", "warning")
 
@@ -2709,7 +2715,7 @@ def run_cycle():
                 sig["cfg"]    = {**cfg, "pct": 40}
                 sig["market"] = "crypto"
                 try:
-                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),market)
+                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),sig["market"])
                     sig["combined"]=_ms;sig["confidence"]=_mc2
                     if _mr:sig["reasons"]=sig.get("reasons",[])+_mr
                 except:pass
@@ -2739,7 +2745,7 @@ def run_cycle():
                 sig["cfg"]    = {**cfg, "pct": max(2, 35 // len(stocks))}
                 sig["market"] = "stock"
                 try:
-                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),market)
+                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),sig["market"])
                     sig["combined"]=_ms;sig["confidence"]=_mc2
                     if _mr:sig["reasons"]=sig.get("reasons",[])+_mr
                 except:pass
@@ -2772,7 +2778,7 @@ def run_cycle():
                 sig["cfg"]    = {**cfg, "pct": max(2, 25 // len(instruments))}
                 sig["market"] = "hfm"
                 try:
-                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),market)
+                    _ms,_mc2,_mr=apply_multidim_intelligence(sym,sig["signal"],sig.get("combined",0),sig.get("confidence",0),sig["market"])
                     sig["combined"]=_ms;sig["confidence"]=_mc2
                     if _mr:sig["reasons"]=sig.get("reasons",[])+_mr
                 except:pass
