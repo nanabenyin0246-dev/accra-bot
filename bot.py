@@ -798,40 +798,75 @@ def get_terminal_intelligence(files=None):
     out = {"global_risk_score": score, "risk_level": level, "age_h": round(age_h, 1)}
 
     recs = data.get("recommendations")
+    rec_actions = []
     if isinstance(recs, list):
-        out["recommendations"] = [r.get("action") for r in recs
-                                   if isinstance(r, dict) and r.get("action") in
-                                   ("REDUCE_EXPOSURE", "ACCUMULATE_BTC", "TAKE_PROFITS", "FAVOR_HARD_ASSETS")][:5]
+        rec_actions = [r.get("action") for r in recs
+                        if isinstance(r, dict) and r.get("action") in
+                        ("REDUCE_EXPOSURE", "ACCUMULATE_BTC", "TAKE_PROFITS", "FAVOR_HARD_ASSETS")][:5]
+    out["recommendations"] = rec_actions
 
     qs = data.get("quick_signals")
-    if isinstance(qs, dict) and isinstance(qs.get("btc_favorable"), bool):
-        out["btc_favorable"] = qs["btc_favorable"]
+    btc_favorable = qs.get("btc_favorable") if isinstance(qs, dict) else None
+    if isinstance(btc_favorable, bool):
+        out["btc_favorable"] = btc_favorable
+
+    crypto = data.get("crypto")
+    btc_trend = crypto.get("btc_trend") if isinstance(crypto, dict) else None
+    if btc_trend in ("STRONG_UP", "UP", "NEUTRAL", "DOWN", "STRONG_DOWN"):
+        out["btc_trend"] = btc_trend
+
+    risks = data.get("active_risks")
+    if isinstance(risks, list):
+        out["crypto_risk_active"] = any(
+            isinstance(r, dict) and r.get("affects_crypto") is True for r in risks)
+
+    fx = data.get("fx_stress")
+    ghs = fx.get("GHS") if isinstance(fx, dict) else None
+    ghs_trend = ghs.get("trend") if isinstance(ghs, dict) else None
+    if ghs_trend in ("STABLE", "WEAK", "CRISIS"):
+        out["ghs_trend"] = ghs_trend
+
+    # Unify every factor Terminal actually provides into one auditable
+    # caution signal, instead of leaving most of it logged-only and unused.
+    reasons = []
+    if level in ("HIGH", "CRITICAL"):
+        reasons.append(f"risk_level={level}")
+    if btc_trend in ("DOWN", "STRONG_DOWN"):
+        reasons.append(f"btc_trend={btc_trend}")
+    if out.get("crypto_risk_active"):
+        reasons.append("active_risk_affects_crypto")
+    if "REDUCE_EXPOSURE" in rec_actions:
+        reasons.append("REDUCE_EXPOSURE")
+    if btc_favorable is False:
+        reasons.append("btc_favorable=False")
+    out["extra_caution"] = bool(reasons)
+    out["caution_reasons"] = reasons
+    out["ghs_crisis"] = (ghs_trend == "CRISIS")
 
     return out
 
 
 def push_status(data):
+    """
+    Pushes live status to the shared Gist (same one used for
+    terminal_override.json / terminal_intelligence.json) instead of
+    committing to the accra-terminal GitHub repo. The repo's Contents API
+    creates a permanent git commit on every single write -- at this bot's
+    cycle frequency (~every 10-40s) that was adding a new commit roughly
+    every cycle, an unbounded and rapidly growing repo history. Gist
+    PATCH updates the file's content without creating repo commit spam.
+    """
     try:
-        import base64
         content_str = json.dumps(data, indent=2)
-        headers = {"Authorization": f"token {GITHUB_TOKEN}",
-                   "Accept": "application/vnd.github.v3+json"}
-        r = requests.get(
-            f"https://api.github.com/repos/{GITHUB_REPO}/contents/bot_status.json",
-            headers=headers, timeout=10)
-        payload = {
-            "message": "bot status update",
-            "content": base64.b64encode(content_str.encode()).decode()
-        }
+        r = requests.patch(
+            f"https://api.github.com/gists/{GIST_ID}",
+            headers={"Authorization": f"token {GITHUB_TOKEN}", "Content-Type": "application/json"},
+            json={"files": {"bot_status.json": {"content": content_str}}},
+            timeout=10)
         if r.ok:
-            payload["sha"] = r.json()["sha"]
-        r2 = requests.put(
-            f"https://api.github.com/repos/{GITHUB_REPO}/contents/bot_status.json",
-            headers=headers, json=payload, timeout=10)
-        if r2.ok:
-            log("  Status pushed to GitHub")
+            log("  Status pushed to Gist")
         else:
-            log(f"  [Status push] {r2.status_code}", "warning")
+            log(f"  [Status push] {r.status_code}: {r.text[:200]}", "warning")
     except Exception as e:
         log(f"  [Push] {e}", "warning")
 
@@ -2389,13 +2424,16 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
             log("  [DREAM] Defensive mode - skipping low conf signal (%d%%)" % conf)
             return False
     if signal == "BUY":
-        _risk = _terminal_intel.get("risk_level")
-        if _risk == "CRITICAL":
+        if _terminal_intel.get("risk_level") == "CRITICAL":
             log(f"  [TERMINAL] Blocking BUY {symbol} - CRITICAL global risk "
                 f"(score:{_terminal_intel.get('global_risk_score')})")
             return False
-        if _risk == "HIGH" and conf < 60:
-            log(f"  [TERMINAL] HIGH risk_level - requiring higher confidence "
+        if market == "crypto" and _terminal_intel.get("extra_caution") and conf < 60:
+            log(f"  [TERMINAL] Extra caution active ({', '.join(_terminal_intel.get('caution_reasons', []))})"
+                f" - requiring higher confidence for {symbol} (conf:{conf}% < 60%)")
+            return False
+        if market == "hfm" and _terminal_intel.get("ghs_crisis") and "USDGHS" in symbol and conf < 60:
+            log(f"  [TERMINAL] GHS in CRISIS trend - requiring higher confidence "
                 f"for {symbol} (conf:{conf}% < 60%)")
             return False
     try:
@@ -2838,10 +2876,11 @@ def run_cycle():
     # FX stress, active risks) -- fetched once per cycle and cached, so
     # execute() (called per-symbol) never makes its own network call.
     _terminal_intel = get_terminal_intelligence(_term_files)
-    if _terminal_intel.get("risk_level") in ("HIGH", "CRITICAL"):
-        log(f"  [TERMINAL] risk_level={_terminal_intel['risk_level']} "
-            f"score={_terminal_intel.get('global_risk_score')} "
-            f"recs={_terminal_intel.get('recommendations', [])}")
+    if _terminal_intel.get("extra_caution") or _terminal_intel.get("ghs_crisis"):
+        log(f"  [TERMINAL] caution={_terminal_intel.get('caution_reasons', [])} "
+            f"ghs_crisis={_terminal_intel.get('ghs_crisis')} "
+            f"btc_trend={_terminal_intel.get('btc_trend')} "
+            f"score={_terminal_intel.get('global_risk_score')}")
 
     try:
         log_intel_summary()
