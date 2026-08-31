@@ -627,6 +627,7 @@ ai_strategy_cycle = 0
 AI_STRATEGY_INTERVAL = 5  # Run AI strategy every 5 cycles
 ai_mode_enabled = True     # Can be toggled from terminal
 trading_paused  = False    # Can be toggled from terminal - blocks new BUYs only
+_terminal_intel = {}       # cached once per cycle, never fetched inside execute()
 TERMINAL_OVERRIDE_TTL_HOURS = 24  # ignore overrides older than this (stale-safety)
 failsafe_active = False
 failsafe_reason = ""
@@ -678,7 +679,23 @@ def get_risk(strategy):
 
 GIST_ID = "4f5f6918288ddaec0a1fc998af3e6f99"
 
-def get_terminal_override():
+def _fetch_terminal_gist():
+    """Single shared fetch of the Terminal Gist per cycle -- both
+    get_terminal_override() and get_terminal_intelligence() read different
+    files from the same response instead of each making their own
+    network call, halving the per-cycle request count."""
+    try:
+        r = requests.get(f"https://api.github.com/gists/{GIST_ID}",
+                          headers={"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {},
+                          timeout=10)
+        r.raise_for_status()
+        return r.json().get("files", {})
+    except Exception as e:
+        log(f"  [TERMINAL] Gist fetch failed: {e}", "warning")
+        return {}
+
+
+def get_terminal_override(files=None):
     """
     Reads an optional 'terminal_override.json' file from the shared Gist so
     a human operator using Accra Terminal can actually influence live
@@ -699,12 +716,10 @@ def get_terminal_override():
         }
     Any field omitted is left untouched (falls through to AI/default).
     """
+    if files is None:
+        files = _fetch_terminal_gist()
     try:
-        r = requests.get(f"https://api.github.com/gists/{GIST_ID}",
-                          headers={"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {},
-                          timeout=10)
-        r.raise_for_status()
-        f = r.json().get("files", {}).get("terminal_override.json")
+        f = files.get("terminal_override.json")
         if not f or not f.get("content"):
             return {}
         data = json.loads(f["content"])
@@ -731,8 +746,67 @@ def get_terminal_override():
         out["ai_mode_enabled"] = data["ai_mode_enabled"]
     if data.get("mode") in ("conservative", "balanced", "aggressive"):
         out["mode"] = data["mode"]
+    for _k in ("crypto_enabled", "stocks_enabled", "hfm_enabled"):
+        if isinstance(data.get(_k), bool):
+            out[_k] = data[_k]
+    if data.get("market_condition") in ("bear", "neutral", "bull"):
+        out["market_condition"] = data["market_condition"]
     if out:
         log(f"  [TERMINAL] Active override ({age_h:.1f}h old): {out}")
+    return out
+
+
+def get_terminal_intelligence(files=None):
+    """
+    Reads Accra Terminal's own computed market intelligence from the same
+    shared Gist -- global risk score, BTC trend, GHS/NGN/ZAR forex stress,
+    active geopolitical risk events, and pre-computed recommendations.
+    This has been pushed by Terminal every cycle already; bot.py just
+    never read it back. Applied as an ADDITIONAL defensive gate on new
+    BUY entries (parallel to the existing DREAM go_defensive directive),
+    never as a silent mode-setter -- strategy.mode stays operator- or
+    AI-controlled so it doesn't end up with three different systems
+    fighting over the same setting. Same TTL/whitelisting discipline as
+    get_terminal_override(). Returns {} on any failure or stale data.
+    """
+    if files is None:
+        files = _fetch_terminal_gist()
+    try:
+        f = files.get("terminal_intelligence.json")
+        if not f or not f.get("content"):
+            return {}
+        data = json.loads(f["content"])
+    except Exception as e:
+        log(f"  [TERMINAL] Intelligence read failed: {e}", "warning")
+        return {}
+
+    ts = data.get("timestamp")
+    if not ts:
+        return {}
+    try:
+        age_h = (datetime.now(timezone.utc) -
+                 datetime.fromisoformat(str(ts).replace("Z", "+00:00"))).total_seconds() / 3600
+    except Exception:
+        return {}
+    if age_h > TERMINAL_OVERRIDE_TTL_HOURS or age_h < 0:
+        return {}  # stale -- silently ignore, this runs every cycle
+
+    score = data.get("global_risk_score")
+    level = data.get("risk_level")
+    if not isinstance(score, (int, float)) or level not in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+        return {}
+    out = {"global_risk_score": score, "risk_level": level, "age_h": round(age_h, 1)}
+
+    recs = data.get("recommendations")
+    if isinstance(recs, list):
+        out["recommendations"] = [r.get("action") for r in recs
+                                   if isinstance(r, dict) and r.get("action") in
+                                   ("REDUCE_EXPOSURE", "ACCUMULATE_BTC", "TAKE_PROFITS", "FAVOR_HARD_ASSETS")][:5]
+
+    qs = data.get("quick_signals")
+    if isinstance(qs, dict) and isinstance(qs.get("btc_favorable"), bool):
+        out["btc_favorable"] = qs["btc_favorable"]
+
     return out
 
 
@@ -2314,6 +2388,16 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
         if _dir.get("go_defensive") and conf < 50:
             log("  [DREAM] Defensive mode - skipping low conf signal (%d%%)" % conf)
             return False
+    if signal == "BUY":
+        _risk = _terminal_intel.get("risk_level")
+        if _risk == "CRITICAL":
+            log(f"  [TERMINAL] Blocking BUY {symbol} - CRITICAL global risk "
+                f"(score:{_terminal_intel.get('global_risk_score')})")
+            return False
+        if _risk == "HIGH" and conf < 60:
+            log(f"  [TERMINAL] HIGH risk_level - requiring higher confidence "
+                f"for {symbol} (conf:{conf}% < 60%)")
+            return False
     try:
         if market == "crypto":
             coin = symbol.replace("USDT", "")
@@ -2722,13 +2806,16 @@ def run_cycle():
     except Exception as _e:
         import traceback
         log(f"  [ASSET MODE] ERROR: {traceback.format_exc()[:200]}", "warning")
-    global ai_strategy_cycle, ai_mode_enabled, trading_paused
+    global ai_strategy_cycle, ai_mode_enabled, trading_paused, _terminal_intel
     ts       = datetime.now().strftime("%H:%M:%S")
     strategy = load_strategy()
 
     # Terminal read-back: a human operator can pause trading or pin a mode
     # via Accra Terminal. Whitelisted/TTL-checked inside get_terminal_override.
-    term = get_terminal_override()
+    # Single shared fetch -- both functions read different files from the
+    # same Gist response instead of two separate network round-trips.
+    _term_files = _fetch_terminal_gist()
+    term = get_terminal_override(_term_files)
     if "trading_paused" in term:
         if term["trading_paused"] != trading_paused:
             log(f"  [TERMINAL] trading_paused -> {term['trading_paused']}")
@@ -2739,6 +2826,22 @@ def run_cycle():
     if "mode" in term:
         strategy["mode"] = term["mode"]
         strategy["updated_by"] = "terminal_override"
+    for _k in ("crypto_enabled", "stocks_enabled", "hfm_enabled"):
+        if _k in term:
+            strategy[_k] = term[_k]
+            strategy["updated_by"] = "terminal_override"
+    if "market_condition" in term:
+        strategy["market_condition"] = term["market_condition"]
+        strategy["updated_by"] = "terminal_override"
+
+    # Terminal's own computed market intelligence (risk score, BTC trend,
+    # FX stress, active risks) -- fetched once per cycle and cached, so
+    # execute() (called per-symbol) never makes its own network call.
+    _terminal_intel = get_terminal_intelligence(_term_files)
+    if _terminal_intel.get("risk_level") in ("HIGH", "CRITICAL"):
+        log(f"  [TERMINAL] risk_level={_terminal_intel['risk_level']} "
+            f"score={_terminal_intel.get('global_risk_score')} "
+            f"recs={_terminal_intel.get('recommendations', [])}")
 
     try:
         log_intel_summary()
@@ -2993,6 +3096,9 @@ def run_cycle():
         "cycle":            cycle_count,
         "strategy":         mode,
         "market_condition": strategy.get("market_condition", "neutral"),
+        "trading_paused":   trading_paused,
+        "ai_mode_enabled":  ai_mode_enabled,
+        "status_tag":       status_tag,
         "assets_scanned":   len(all_results),
         "open_trades":      len(open_trades),
         "open_positions": [
