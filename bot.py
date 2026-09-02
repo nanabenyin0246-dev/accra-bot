@@ -1931,27 +1931,17 @@ def calc_vwap_real(closes, volumes, period=20):
 
 def get_trump_analysis_score():
     """
-    TRUMP ANALYSIS MODULE (Kobeissi Letter verified)
-    Disable when Trump leaves: TRUMP_ANALYSIS_ENABLED = False
-    
-    Verified accurate across:
-    - China tariffs (May 2025)
-    - Venezuela/Maduro capture (Dec 2025)
-    - Greenland/EU deal (Jan 2026)
-    - India trade deal (Feb 2026)
-    - Iran war/ceasefire (Feb-Mar 2026)
-    
-    10-Step Playbook:
-    1. Verbal pressure - "make a deal"
-    2. Strategic posturing
-    3. Friday night strike (after markets close)
-    4. Risk premium expansion
-    5. "Forever war/tariff" language
-    6. Markets price prolonged conflict = NEW LOWS
-    7. Conditional de-escalation signals
-    8. Market/political feedback loop = SMART MONEY BUYS
-    9. The Deal announced = violent rally
-    10. Victory lap = take profits
+    Price/Fear&Greed-cycle heuristic (NOT verified political intelligence).
+    The docstring here used to claim this was "verified accurate" across
+    specific real-world events (tariffs, Venezuela, Iran, etc.) -- nothing
+    in the function actually checks those events; it only reads Fear&Greed
+    and BTC weekly price change. That claim has been removed since it
+    can't be substantiated by the code. This is a market-cycle pattern
+    matcher using Trump-era terminology as labels, blended with the real
+    get_gdelt_risk() political/news signal so the final score isn't
+    price-action alone.
+
+    Disable when no longer relevant: TRUMP_ANALYSIS_ENABLED = False
     """
     if not TRUMP_ANALYSIS_ENABLED:
         return 0, "Trump analysis disabled"
@@ -1960,47 +1950,30 @@ def get_trump_analysis_score():
         fg = get_fear_greed()
         fg_val = fg.get("value", 50)
 
-        # Get weekly BTC change as market proxy
         r = requests.get("https://api.binance.com/api/v3/klines",
             params={"symbol":"BTCUSDT","interval":"1d","limit":7}, timeout=10)
         closes = [float(k[4]) for k in r.json()]
         weekly_chg = (closes[-1] - closes[0]) / closes[0] * 100
+        gdelt_score, gdelt_label = get_gdelt_risk()
 
-        # STEP 8: Smart money accumulation (BEST BUY)
-        # Triggered by: oil near $90, stocks -5%+, F&G extreme fear
-        # This is when Trump's pressure is MAXIMUM before deal
         if fg_val < 15 and weekly_chg < -10:
-            return +20, "TRUMP STEP 8: Max pressure before deal - Smart money BUY zone"
+            base, label = 20, "Max pressure/panic pattern - accumulation zone (price/FG heuristic)"
+        elif fg_val < 35 and weekly_chg < -5:
+            base, label = 15, "Elevated fear + pullback (price/FG heuristic)"
+        elif fg_val < 20 and weekly_chg < -5:
+            base, label = 15, "De-escalation-shaped dip (price/FG heuristic)"
+        elif fg_val < 30 and weekly_chg < -3:
+            base, label = 8, "Mild fear priced in (price/FG heuristic)"
+        elif fg_val < 40 and weekly_chg < -8:
+            base, label = -12, "Escalation-shaped drawdown - reduce exposure (price/FG heuristic)"
+        elif fg_val > 70 and weekly_chg > 8:
+            base, label = -15, "Blow-off rally - take profits (price/FG heuristic)"
+        elif fg_val > 55 and weekly_chg > 5:
+            base, label = 10, "Rally continuation (price/FG heuristic)"
+        else:
+            base, label = 0, "No clear price-cycle pattern"
 
-        # IRAN Apr 2026: fragile ceasefire, Hormuz still contested
-        if fg_val < 35 and weekly_chg < -5:
-            return +15, 'IRAN STEP 7: Fragile ceasefire - accumulate'
-        # STEP 7: Conditional de-escalation starting
-        # Trump language softens, deal coming soon
-        if fg_val < 20 and weekly_chg < -5:
-            return +15, "TRUMP STEP 7: De-escalation signals - Begin accumulating"
-
-        # STEP 6: Markets pricing prolonged conflict
-        # Second or third dip - structural repositioning
-        if fg_val < 30 and weekly_chg < -3:
-            return +8, "TRUMP STEP 6: Prolonged conflict priced in - Watch entries"
-
-        # STEP 4-5: Escalation phase - stay cautious
-        # "Forever war/tariff" language = more pain coming
-        if fg_val < 40 and weekly_chg < -8:
-            return -12, "TRUMP STEP 4-5: Escalation active - Reduce exposure"
-
-        # STEP 10: Victory lap - violent repricing done
-        # Time to take profits before reversal
-        if fg_val > 70 and weekly_chg > 8:
-            return -15, "TRUMP STEP 10: Victory rally - Take profits"
-
-        # STEP 9: Deal just announced
-        # Sharp rally incoming - buy any dips
-        if fg_val > 55 and weekly_chg > 5:
-            return +10, "TRUMP STEP 9: Deal announced - Ride the rally"
-
-        return 0, "Trump playbook: No clear step detected"
+        return base + gdelt_score, f"{label} + {gdelt_label}"
 
     except Exception as e:
         return 0, f"Trump analysis error: {e}"
@@ -2012,10 +1985,13 @@ def get_trump_analysis_score():
 
 def get_geopolitical_score():
     """
-    Universal Geopolitical Market Intelligence
-    Based on Kobeissi Letter research - timeless principles
-    Works regardless of president, conflict or country
-    Core truth: Extreme fear + oversold market = best buy opportunity
+    Market-cycle heuristic (NOT a geopolitical data feed).
+    Despite the name, this previously used only Fear&Greed + BTC weekly
+    price change -- no political/news source was ever consulted here.
+    It now blends in get_gdelt_risk(), which IS a real, free, no-key
+    political/global-risk signal (GDELT Project news tone). The price/FG
+    part stays as a genuine "extreme fear = historical buy zone" heuristic,
+    just honestly labeled.
     """
     try:
         fg = get_fear_greed()
@@ -2025,22 +2001,23 @@ def get_geopolitical_score():
             params={"symbol":"BTCUSDT","interval":"1d","limit":7}, timeout=10)
         closes = [float(k[4]) for k in r.json()]
         weekly_change = (closes[-1] - closes[0]) / closes[0] * 100
+        gdelt_score, gdelt_label = get_gdelt_risk()
 
         # BEST BUY ZONE: Extreme fear + market crashed
         if fg_val < 15 and weekly_change < -10:
-            return +25, "EXTREME FEAR + CRASH: Historical best buy zone"
-        if fg_val < 25 and weekly_change < -5:
-            return +20, "High fear + pullback: Smart money accumulation"
-        if fg_val < 30 and weekly_change < -3:
-            return +12, "Fear market: Good entry conditions"
+            base, label = 25, "EXTREME FEAR + CRASH: Historical best buy zone (price/FG heuristic)"
+        elif fg_val < 25 and weekly_change < -5:
+            base, label = 20, "High fear + pullback: Smart money accumulation (price/FG heuristic)"
+        elif fg_val < 30 and weekly_change < -3:
+            base, label = 12, "Fear market: Good entry conditions (price/FG heuristic)"
+        elif fg_val > 75 and weekly_change > 10:
+            base, label = -20, "EXTREME GREED + RALLY: Take profits soon (price/FG heuristic)"
+        elif fg_val > 60 and weekly_change > 5:
+            base, label = -10, "Greed building: Reduce exposure (price/FG heuristic)"
+        else:
+            base, label = 0, "Neutral market conditions (price/FG heuristic)"
 
-        # DANGER ZONE: Greed + overbought
-        if fg_val > 75 and weekly_change > 10:
-            return -20, "EXTREME GREED + RALLY: Take profits soon"
-        if fg_val > 60 and weekly_change > 5:
-            return -10, "Greed building: Reduce exposure"
-
-        return 0, "Neutral market conditions"
+        return base + gdelt_score, f"{label} + {gdelt_label}"
 
     except Exception as e:
         return 0, f"Geo check error: {e}"
@@ -2101,6 +2078,71 @@ def fetch_news(query):
     return items
 
 
+def get_gdelt_risk():
+    """
+    Real political/global risk signal via the GDELT Project's DOC 2.0 API.
+    Free, no API key required, updated continuously from global news coverage.
+    Returns (score, label) where score is negative for rising conflict/crisis
+    tone and near-zero for calm coverage. This is the genuine replacement for
+    the "geopolitical"/"Trump" modules below, which were price-derived proxies
+    mislabeled as political intelligence -- this function is the first one in
+    this file that actually reads real-world political/news content.
+    """
+    global _gdelt_cache
+    try:
+        _gdelt_cache
+    except NameError:
+        _gdelt_cache = {"score": 0, "label": "No data yet", "ts": 0}
+    now = time.time()
+    if now - _gdelt_cache["ts"] < 1800:
+        return _gdelt_cache["score"], _gdelt_cache["label"]
+    try:
+        r = requests.get(
+            "https://api.gdeltproject.org/api/v2/doc/doc",
+            params={
+                "query": "(war OR sanctions OR coup OR default OR crisis OR tariff) "
+                         "sourcelang:english",
+                "mode": "ToneChart",
+                "timespan": "6h",
+                "format": "json",
+            },
+            timeout=10, headers={"User-Agent": "AccraBot/1.0"},
+        )
+        if r.ok:
+            bins = r.json().get("tonechart", [])
+            total = sum(b.get("count", 0) for b in bins)
+            if total > 0:
+                weighted = sum(b.get("bin", 0) * b.get("count", 0) for b in bins)
+                avg_tone = weighted / total
+                # avg_tone typically ranges roughly -10 (very negative) to +10
+                score = max(-25, min(10, round(avg_tone * 2.5)))
+                label = (f"GDELT global news tone {avg_tone:+.1f} "
+                         f"across {total} articles (6h)")
+                _gdelt_cache = {"score": score, "label": label, "ts": now}
+    except Exception as e:
+        log(f"  [GDELT] {e}", "warning")
+        _gdelt_cache["ts"] = now  # avoid hammering on repeated failures
+    return _gdelt_cache["score"], _gdelt_cache["label"]
+
+
+def get_news_sentiment(symbol):
+    """
+    Real crypto news sentiment via fetch_news() (CryptoPanic, free tier).
+    This function existed unused before -- fetch_news() was fully built but
+    never called anywhere, so real news never actually affected a trade.
+    """
+    items = fetch_news(symbol)
+    if not items:
+        return 0, "No news signal"
+    bull = sum(i.get("bull", 0) for i in items)
+    bear = sum(i.get("bear", 0) for i in items)
+    if bull + bear == 0:
+        return 0, "No news signal"
+    tilt = (bull - bear) / (bull + bear)
+    score = max(-15, min(15, round(tilt * 15)))
+    return score, f"News sentiment {bull}bull/{bear}bear ({len(items)} stories)"
+
+
 def deep_analysis(symbol, asset_type, strategy):
     global _fund_cache
     c = _fund_cache.get(symbol, {"result": None, "ts": 0})
@@ -2113,8 +2155,15 @@ def deep_analysis(symbol, asset_type, strategy):
     elif fg_val >= 75: score = -35; signal = "BEARISH"
     elif fg_val >= 65: score = -15; signal = "BEARISH"
     else:              score = 0;   signal = "NEUTRAL"
-    result = {"score": score, "signal": signal, "top_risk": "Market risk",
-              "top_opp": "Follow signals", "ghana": f"F&G:{fg_val}", "reason": f"F&G:{fg_val}"}
+    gdelt_score, gdelt_label = get_gdelt_risk()
+    news_score, news_label = get_news_sentiment(symbol)
+    score = max(-100, min(100, score + gdelt_score + news_score))
+    if score >= 15:   signal = "BULLISH"
+    elif score <= -15: signal = "BEARISH"
+    else:              signal = "NEUTRAL"
+    result = {"score": score, "signal": signal, "top_risk": gdelt_label,
+              "top_opp": news_label, "ghana": f"F&G:{fg_val}",
+              "reason": f"F&G:{fg_val} | {gdelt_label} | {news_label}"}
     _fund_cache[symbol] = {"result": result, "ts": time.time()}
     return result
 
