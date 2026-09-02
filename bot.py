@@ -3731,22 +3731,21 @@ def main():
         if XYZ_ENABLED: xyz_scan_and_trade()
 
         log(f"\n  Sleeping {SLEEP_SECS}s...")
-    # Sleep the full interval first. This used to check for internet on
-    # every 1s tick and `break` out as soon as a ping succeeded -- since
-    # the internet is normally up, that fired on the very first tick,
-    # collapsing the intended 60s gap between cycles down to ~1s. That
-    # silently multiplied every external call (including GitHub Gist
-    # reads/writes) by ~60x, which is what was tripping GitHub's rate
-    # limit. Sleep first, then only loop-and-wait if the connection is
-    # actually down.
-    time.sleep(SLEEP_SECS)
-    while True:
-        try:
-            requests.get("https://api.binance.com/api/v3/ping", timeout=3)
-            break  # Internet is up, proceed with the next cycle
-        except:
-            log("  [NET] Waiting for internet...")
-            time.sleep(5)
+        # This sleep block used to be dedented one level too far, placing
+        # it OUTSIDE this `while True:` loop -- unreachable dead code.
+        # The bot has never actually slept between cycles; it looped
+        # run_cycle() back-to-back with zero pause, which is the real
+        # reason cycles ran every ~8s regardless of SLEEP_SECS and is
+        # what was tripping GitHub's rate limit on every Gist status
+        # push. Re-indented so it actually runs each iteration.
+        time.sleep(SLEEP_SECS)
+        while True:
+            try:
+                requests.get("https://api.binance.com/api/v3/ping", timeout=3)
+                break  # Internet is up, proceed with the next cycle
+            except:
+                log("  [NET] Waiting for internet...")
+                time.sleep(5)
 
 
 if __name__ == "__main__":
