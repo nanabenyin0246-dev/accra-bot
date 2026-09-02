@@ -866,7 +866,16 @@ def push_status(data):
         if r.ok:
             log("  Status pushed to Gist")
         else:
-            log(f"  [Status push] {r.status_code}: {r.text[:200]}", "warning")
+            _rl_remain = r.headers.get("X-RateLimit-Remaining")
+            _rl_reset = r.headers.get("X-RateLimit-Reset")
+            _rl_reset_str = ""
+            if _rl_reset:
+                try:
+                    _rl_reset_str = f" | resets {datetime.fromtimestamp(int(_rl_reset)).strftime('%H:%M:%S')} UTC"
+                except Exception:
+                    pass
+            log(f"  [Status push] {r.status_code}: {r.text[:200]} "
+                f"| remaining={_rl_remain}{_rl_reset_str}", "warning")
     except Exception as e:
         log(f"  [Push] {e}", "warning")
 
