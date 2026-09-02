@@ -1,7 +1,7 @@
 import math
 from datetime import datetime
 
-def kelly_position_size(confidence_pct, free_usdt, sl_multiplier=1.0, tp_multiplier=1.5, min_trade=2.0):
+def kelly_position_size(confidence_pct, free_usdt, sl_multiplier=1.0, tp_multiplier=1.5, min_trade=5.0):
     p = confidence_pct / 100.0
     q = 1.0 - p
     f = (p / sl_multiplier) - (q / tp_multiplier)
@@ -46,7 +46,7 @@ def trade_decision(signal_confidence, signal_direction, free_usdt, fear_greed=50
     if kelly_size <= 0:
         return {"trade": False, "position_size": 0.0, "adjusted_confidence": adj_conf, "ev": ev, "reason": "Kelly=0"}
     skew = position_skew_factor(current_balance, starting_balance)
-    final_size = round(max(min(kelly_size * skew, free_usdt * 0.40), 2.0), 2)
+    final_size = round(max(min(kelly_size * skew, free_usdt * 0.40), 5.0), 2)
     return {"trade": True, "position_size": final_size, "adjusted_confidence": adj_conf, "ev": ev, "kelly_size": kelly_size, "skew": skew, "reason": f"adj_conf={adj_conf:.1f}% EV={ev:.3f}% size=${final_size}"}
 
 def trade_decision_with_kronos(signal_confidence, signal_direction, free_usdt, **kwargs):

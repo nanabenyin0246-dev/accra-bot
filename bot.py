@@ -2536,8 +2536,8 @@ def execute(symbol, signal, price, cfg, conf, market, tier="PRIORITY"):
                     return False
                 amount = _decision["position_size"]
                 log(f"  [QUANT] adj={_decision['adjusted_confidence']:.1f}% EV={_decision.get('ev',0):.3f}% size=${amount}")
-                if amount < 2:
-                    log(f"  SKIP {symbol}: ${amount:.2f} < $2")
+                if amount < 5:
+                    log(f"  SKIP {symbol}: ${amount:.2f} < $5")
                     return False
                 min_notional = _lot["min_notional"]
                 if amount < min_notional:
