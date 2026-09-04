@@ -612,7 +612,11 @@ def call_multi_ai(prompt, system="Return valid JSON only.", max_tokens=None):
                 rj = r.json()
                 if "choices" not in rj:
                     raise Exception(rj.get("error",{}).get("message","no choices")[:60])
-                text = rj["choices"][0]["message"]["content"].strip()
+                _content = rj["choices"][0]["message"].get("content")
+                if not _content:
+                    _finish = rj["choices"][0].get("finish_reason","?")
+                    raise Exception(f"empty content (finish_reason={_finish})")
+                text = _content.strip()
                 text = re.sub(r"```json|```","",text).strip()
                 _ai_usage[name] = _ai_usage.get(name,0)+1
                 log(f"  [AI:{name}] OK G:{_ai_usage.get('groq',0)} Gem:{_ai_usage.get('gemini',0)} OR:{_ai_usage.get('openrouter',0)}")
