@@ -559,7 +559,7 @@ def build_ai_providers():
         AI_PROVIDERS.append({"name":"gemini",
             "url":f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_KEY}",
             "model":"gemini-3.6-flash","headers":{"Content-Type":"application/json"},"max_tokens":300,"gemini":True})
-    if OPENROUTER_KEY and False:  # disabled - key invalid/revoked (HTTP "User not found")
+    if OPENROUTER_KEY:
         AI_PROVIDERS.append({"name":"openrouter","url":"https://openrouter.ai/api/v1/chat/completions",
             "model":"meta-llama/llama-3.3-70b-instruct:free","headers":{"Authorization":f"Bearer {OPENROUTER_KEY}","Content-Type":"application/json"},"max_tokens":300})
     if MISTRAL_KEY:
