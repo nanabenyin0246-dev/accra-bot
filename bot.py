@@ -561,7 +561,7 @@ def build_ai_providers():
             "model":"gemini-3.6-flash","headers":{"Content-Type":"application/json"},"max_tokens":300,"gemini":True})
     if OPENROUTER_KEY:
         AI_PROVIDERS.append({"name":"openrouter","url":"https://openrouter.ai/api/v1/chat/completions",
-            "model":"meta-llama/llama-3.3-70b-instruct:free","headers":{"Authorization":f"Bearer {OPENROUTER_KEY}","Content-Type":"application/json"},"max_tokens":300})
+            "model":"openrouter/free","headers":{"Authorization":f"Bearer {OPENROUTER_KEY}","Content-Type":"application/json"},"max_tokens":300})
     if MISTRAL_KEY:
         AI_PROVIDERS.append({"name":"mistral","url":"https://api.mistral.ai/v1/chat/completions",
             "model":"mistral-small-latest","headers":{"Authorization":f"Bearer {MISTRAL_KEY}","Content-Type":"application/json"},"max_tokens":300})
