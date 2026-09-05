@@ -657,14 +657,68 @@ FAILSAFE_STRATEGY = {
 }
 
 
-def load_strategy():
+def load_strategy(files=None):
+    """
+    Loads the persisted trading strategy. Previously this only ever read a
+    local disk file (STRATEGY_FILE) that nothing in this codebase writes
+    to -- get_ai_autonomous_strategy() and the terminal's approveStrategy()
+    both push their decisions to bot_strategy.json IN THE GIST, but this
+    function never read that back. Net effect: every AI-computed strategy
+    was applied for exactly the one cycle it was computed in, then silently
+    discarded the next cycle when this reloaded the stale/default local
+    file -- the AI was narrating decisions it could never actually keep in
+    effect.
+
+    Now reads bot_strategy.json from the shared Gist first (whitelisted
+    fields, TTL-checked via last_updated like terminal_override.json),
+    and only falls back to the local file / DEFAULT_STRATEGY if the Gist
+    copy is missing, stale, or invalid.
+    """
+    if files is None:
+        files = _fetch_terminal_gist()
+    try:
+        f = files.get("bot_strategy.json")
+        if f and f.get("content"):
+            data = json.loads(f["content"])
+            last_updated = data.get("last_updated")
+            if last_updated:
+                ts = datetime.fromisoformat(str(last_updated).replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+                if 0 <= age_h <= TERMINAL_OVERRIDE_TTL_HOURS:
+                    out = {**DEFAULT_STRATEGY}
+                    if data.get("mode") in ("conservative", "balanced", "aggressive"):
+                        out["mode"] = data["mode"]
+                    if data.get("market_condition") in ("bear", "neutral", "bull"):
+                        out["market_condition"] = data["market_condition"]
+                    if isinstance(data.get("min_confidence"), (int, float)):
+                        out["min_confidence"] = max(0, min(100, data["min_confidence"]))
+                    for _k in ("crypto_enabled", "stocks_enabled", "hfm_enabled"):
+                        if isinstance(data.get(_k), bool):
+                            out[_k] = data[_k]
+                    for _k in ("sl_multiplier", "tp_multiplier"):
+                        if isinstance(data.get(_k), (int, float)):
+                            out[_k] = data[_k]
+                    for _k in ("prefer_assets", "avoid_assets"):
+                        if isinstance(data.get(_k), list):
+                            out[_k] = [str(x) for x in data[_k]][:20]
+                    if data.get("updated_by") in ("ai_autonomous", "terminal_ai", "manual", "failsafe"):
+                        out["updated_by"] = data["updated_by"]
+                    log(f"  Strategy: {out['mode']} by {out['updated_by']} ({age_h:.1f}h old, from Gist)")
+                    return out
+                else:
+                    log(f"  [Strategy] Gist copy is {age_h:.1f}h old - ignoring as stale", "warning")
+    except Exception as e:
+        log(f"  [Strategy] Gist read failed: {e} - falling back to local file", "warning")
+
     try:
         if os.path.exists(STRATEGY_FILE):
             with open(STRATEGY_FILE) as f:
                 saved = json.load(f)
                 merged = {**DEFAULT_STRATEGY, **saved}
                 if saved.get("updated_by") != "default":
-                    log(f"  Strategy: {saved.get('mode')} by {saved.get('updated_by')}")
+                    log(f"  Strategy: {saved.get('mode')} by {saved.get('updated_by')} (local file)")
                 return merged
     except Exception as e:
         log(f"  [Strategy] {e}", "warning")
@@ -2908,13 +2962,14 @@ def run_cycle():
         log(f"  [ASSET MODE] ERROR: {traceback.format_exc()[:200]}", "warning")
     global ai_strategy_cycle, ai_mode_enabled, trading_paused, _terminal_intel
     ts       = datetime.now().strftime("%H:%M:%S")
-    strategy = load_strategy()
 
     # Terminal read-back: a human operator can pause trading or pin a mode
     # via Accra Terminal. Whitelisted/TTL-checked inside get_terminal_override.
-    # Single shared fetch -- both functions read different files from the
-    # same Gist response instead of two separate network round-trips.
+    # Single shared fetch -- load_strategy() and both terminal_* functions
+    # read different files from the same Gist response instead of three
+    # separate network round-trips.
     _term_files = _fetch_terminal_gist()
+    strategy = load_strategy(_term_files)
     term = get_terminal_override(_term_files)
     if "trading_paused" in term:
         if term["trading_paused"] != trading_paused:
