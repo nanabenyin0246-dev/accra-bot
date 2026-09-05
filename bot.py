@@ -2224,7 +2224,18 @@ def deep_analysis(symbol, asset_type, strategy):
     else:              score = 0;   signal = "NEUTRAL"
     gdelt_score, gdelt_label = get_gdelt_risk()
     news_score, news_label = get_news_sentiment(symbol)
-    score = max(-100, min(100, score + gdelt_score + news_score))
+    # Capped at +/-20 (not +/-100): fund_score is a sentiment/risk modifier on
+    # top of the technical signal, not a second vote of equal weight. Before
+    # this cap, sustained Greed (F&G>=65) alone pinned fund_score around -15
+    # to -23 for every symbol every cycle, which at 0.45 weight in
+    # unified_signal made a technical score of ~98+ required to clear a BUY
+    # threshold of 45 -- effectively vetoing every BUY regardless of chart
+    # quality for as long as sentiment stayed elevated. Capping means the
+    # worst case is roughly a -9 pull on the combined score (0.45 * 20),
+    # enough to break a close call without overriding a strong technical
+    # setup. Symmetric, so it also stops extreme Fear from single-handedly
+    # forcing a BUY on bad technicals.
+    score = max(-20, min(20, score + gdelt_score + news_score))
     if score >= 15:   signal = "BULLISH"
     elif score <= -15: signal = "BEARISH"
     else:              signal = "NEUTRAL"
